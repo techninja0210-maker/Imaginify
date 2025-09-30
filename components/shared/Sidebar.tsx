@@ -72,14 +72,9 @@ const Sidebar = () => {
           </SignedIn>
 
           <SignedOut>
-            <div className="flex flex-col gap-3">
-              <Button asChild variant="outline" className="w-full">
-                <Link href="/pricing">Pricing</Link>
-              </Button>
-              <Button asChild className="button bg-purple-gradient bg-cover">
-                <Link href="/sign-in">Login</Link>
-              </Button>
-            </div>
+            <Button asChild className="button bg-purple-gradient bg-cover">
+              <Link href="/sign-in">Login</Link>
+            </Button>
           </SignedOut>
         </nav>
       </div>

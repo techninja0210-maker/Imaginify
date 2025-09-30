@@ -73,14 +73,9 @@ const MobileNav = () => {
         </SignedIn>
 
         <SignedOut>
-            <div className="flex gap-2">
-              <Button asChild variant="outline">
-                <Link href="/pricing">Pricing</Link>
-              </Button>
-              <Button asChild className="button bg-purple-gradient bg-cover">
-                <Link href="/sign-in">Login</Link>
-              </Button>
-            </div>
+            <Button asChild className="button bg-purple-gradient bg-cover">
+              <Link href="/sign-in">Login</Link>
+            </Button>
           </SignedOut>
       </nav>
     </header>
