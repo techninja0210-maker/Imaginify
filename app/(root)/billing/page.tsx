@@ -59,8 +59,8 @@ const BillingPage = async () => {
         </div>
 
         <form action={async () => {
-          if (!customerId) return;
           "use server";
+          if (!customerId) return;
           await openCustomerPortal(customerId);
         }}>
           <Button
