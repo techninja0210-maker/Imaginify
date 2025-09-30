@@ -26,6 +26,10 @@ const UserSchema = new Schema({
   lastName: {
     type: String,
   },
+  stripeCustomerId: {
+    type: String,
+    index: true,
+  },
   planId: {
     type: Number,
     default: 1,

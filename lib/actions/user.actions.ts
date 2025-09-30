@@ -91,3 +91,6 @@ export async function updateCredits(userId: string, creditFee: number) {
     handleError(error);
   }
 }
+
+// Set Stripe customer ID for a user (by Clerk userId)
+// (Removed) setUserStripeCustomerId manual setter per request

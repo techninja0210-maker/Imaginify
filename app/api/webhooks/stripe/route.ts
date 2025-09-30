@@ -1,6 +1,8 @@
 /* eslint-disable camelcase */
 import { createTransaction } from "@/lib/actions/transaction.action";
 import { NextResponse } from "next/server";
+import { connectToDatabase } from "@/lib/database/mongoose";
+import User from "@/lib/database/models/user.model";
 import stripe from "stripe";
 
 export async function POST(request: Request) {
@@ -22,7 +24,8 @@ export async function POST(request: Request) {
 
   // CREATE
   if (eventType === "checkout.session.completed") {
-    const { id, amount_total, metadata } = event.data.object;
+    const { id, amount_total, metadata } = event.data.object as any;
+    const customerId = (event.data.object as any).customer as string | null;
 
     const transaction = {
       stripeId: id,
@@ -32,6 +35,20 @@ export async function POST(request: Request) {
       buyerId: metadata?.buyerId || "",
       createdAt: new Date(),
     };
+
+    // Persist Stripe customer ID on the user for future billing portal access
+    try {
+      if (metadata?.clerkUserId && customerId) {
+        await connectToDatabase();
+        await User.findOneAndUpdate(
+          { clerkId: metadata.clerkUserId },
+          { stripeCustomerId: customerId },
+          { new: true }
+        );
+      }
+    } catch (e) {
+      // no-op: we still record the transaction
+    }
 
     const newTransaction = await createTransaction(transaction);
     
