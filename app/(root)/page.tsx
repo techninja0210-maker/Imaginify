@@ -16,6 +16,14 @@ const Home = async ({ searchParams }: SearchParamProps) => {
         <h1 className="home-heading">
           Unleash Your Creative Vision with Imaginify
         </h1>
+        <div className="mt-6 flex justify-center">
+          <Link href="/pricing" className="button bg-purple-gradient bg-cover rounded-full px-6 py-3 text-white">
+            See Pricing
+          </Link>
+        </div>
+      </section>
+
+      <section className="mt-6">
         <ul className="flex-center w-full gap-20">
           {navLinks.slice(1, 5).map((link) => (
             <Link
@@ -26,7 +34,7 @@ const Home = async ({ searchParams }: SearchParamProps) => {
               <li className="flex-center w-fit rounded-full bg-white p-4">
                 <Image src={link.icon} alt="image" width={24} height={24} />
               </li>
-              <p className="p-14-medium text-center text-white">{link.label}</p>
+              <p className="p-14-medium text-center text-dark-700">{link.label}</p>
             </Link>
           ))}
         </ul>

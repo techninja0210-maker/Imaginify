@@ -5,24 +5,24 @@ import { Button } from "@/components/ui/button";
 const plans = [
   {
     name: "Starter",
-    price: "$19/mo",
+    price: "$10/mo",
     description: "For individuals getting started",
-    features: ["1 project", "Basic support", "Limited usage"],
+    features: ["100 credits", "Basic support", "Limited usage"],
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER,
   },
   {
     name: "Pro",
-    price: "$49/mo",
+    price: "$30/mo",
     description: "For growing teams",
-    features: ["5 projects", "Priority support", "Increased usage"],
+    features: ["500 credits", "Priority support", "Increased usage"],
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO,
   },
   {
     name: "Business",
-    price: "$99/mo",
+    price: "$60/mo",
     description: "For businesses at scale",
-    features: ["Unlimited projects", "Priority support", "High usage"],
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_BUSINESS,
+    features: ["1000 credits", "Priority support", "High usage"],
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SCALE,
   },
 ];
 
