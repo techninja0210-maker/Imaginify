@@ -1,6 +1,6 @@
 import Header from "@/components/shared/Header";
 import { Button } from "@/components/ui/button";
-import { openCustomerPortal } from "@/lib/actions/subscription.actions";
+import { openCustomerPortal, openCustomerPortalWithReturnUrl } from "@/lib/actions/subscription.actions";
 import { getUserById } from "@/lib/actions/user.actions";
 import { auth } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
@@ -58,17 +58,22 @@ const BillingPage = async () => {
           <div className="p-16-regular">Credits: <span className="text-purple-500">{typeof user?.creditBalance === "number" ? user.creditBalance : 0}</span></div>
         </div>
 
+        {/* Direct link to Stripe Billing Portal (provided URL) */}
+        <a href="https://billing.stripe.com/p/login/test_6oUaEX1FCbFC5AG8sY5Vu00" target="_blank" rel="noopener noreferrer" className="w-full">
+          <Button type="button" className="w-full rounded-full bg-purple-gradient bg-cover">Manage Subscription in Stripe</Button>
+        </a>
+
         <form action={async () => {
           "use server";
           if (!customerId) return;
-          await openCustomerPortal(customerId);
+          await openCustomerPortalWithReturnUrl(customerId, "https://www.shoppablevideos.com/");
         }}>
           <Button
             type="submit"
             className="w-full rounded-full bg-purple-gradient bg-cover"
             disabled={!customerId}
           >
-            {customerId ? "Open Customer Portal" : "Customer Portal (coming soon)"}
+            {customerId ? "Open Customer Portal (return to site)" : "Customer Portal (coming soon)"}
           </Button>
         </form>
       </section>

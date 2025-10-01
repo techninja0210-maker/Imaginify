@@ -42,4 +42,19 @@ export async function openCustomerPortal(customerId: string) {
 }
 
 
+export async function openCustomerPortalWithReturnUrl(customerId: string, returnUrl: string) {
+  const { userId } = auth();
+  if (!userId) redirect("/sign-in");
+
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+  const portal = await stripe.billingPortal.sessions.create({
+    customer: customerId,
+    return_url: returnUrl,
+  });
+
+  redirect(portal.url);
+}
+
+
 

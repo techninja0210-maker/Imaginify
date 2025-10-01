@@ -44,6 +44,11 @@ export const navLinks = [
     route: "/pricing",
     icon: "/assets/icons/coins.svg",
   },
+  {
+    label: "Billing",
+    route: "https://billing.stripe.com/p/login/test_6oUaEX1FCbFC5AG8sY5Vu00",
+    icon: "/assets/icons/credit-coins.svg",
+  },
 ];
 
 export const plans = [
