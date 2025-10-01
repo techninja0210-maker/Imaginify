@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { openCustomerPortal, openCustomerPortalWithReturnUrl } from "@/lib/actions/subscription.actions";
 import { getUserById } from "@/lib/actions/user.actions";
 import { auth } from "@clerk/nextjs";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Stripe from "stripe";
 
 // Load Stripe customer ID from DB
@@ -18,7 +18,8 @@ const BillingPage = async () => {
 
   // Load user and Stripe customer
   const user = await getUserById(userId);
-  const customerId = user?.stripeCustomerId ?? null;
+  if (!user) notFound();
+  const customerId = user.stripeCustomerId ?? null;
 
   // Fetch active subscription (if any)
   let currentPlan: string | null = null;
@@ -43,7 +44,8 @@ const BillingPage = async () => {
         }
       }
     } catch {
-      // Ignore subscription fetch errors; the portal button remains available
+      // If subscription retrieval fails unexpectedly, fallback to not-found
+      notFound();
     }
   }
 
