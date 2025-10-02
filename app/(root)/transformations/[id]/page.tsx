@@ -5,53 +5,53 @@ import Link from "next/link";
 import Header from "@/components/shared/Header";
 import TransformedImage from "@/components/shared/TransformedImage";
 import { Button } from "@/components/ui/button";
-import { getImageById } from "@/lib/actions/image.actions";
+import { getJobById } from "@/lib/actions/job.actions";
 import { getImageSize } from "@/lib/utils";
 import { DeleteConfirmation } from "@/components/shared/DeleteConfirmation";
 
 const ImageDetails = async ({ params: { id } }: SearchParamProps) => {
   const { userId } = auth();
 
-  const image = await getImageById(id);
+  const job = await getJobById(id);
 
   return (
     <>
-      <Header title={image.title} />
+      <Header title={job.title} />
 
       <section className="mt-5 flex flex-wrap gap-4">
         <div className="p-14-medium md:p-16-medium flex gap-2">
           <p className="text-dark-600">Transformation:</p>
           <p className=" capitalize text-purple-400">
-            {image.transformationType}
+            {job.workflowType}
           </p>
         </div>
 
-        {image.prompt && (
+        {job.description && (
           <>
             <p className="hidden text-dark-400/50 md:block">&#x25CF;</p>
             <div className="p-14-medium md:p-16-medium flex gap-2 ">
-              <p className="text-dark-600">Prompt:</p>
-              <p className=" capitalize text-purple-400">{image.prompt}</p>
+              <p className="text-dark-600">Description:</p>
+              <p className=" capitalize text-purple-400">{job.description}</p>
             </div>
           </>
         )}
 
-        {image.color && (
+        {job.status && (
           <>
             <p className="hidden text-dark-400/50 md:block">&#x25CF;</p>
             <div className="p-14-medium md:p-16-medium flex gap-2">
-              <p className="text-dark-600">Color:</p>
-              <p className=" capitalize text-purple-400">{image.color}</p>
+              <p className="text-dark-600">Status:</p>
+              <p className=" capitalize text-purple-400">{job.status}</p>
             </div>
           </>
         )}
 
-        {image.aspectRatio && (
+        {job.quotedCredits && (
           <>
             <p className="hidden text-dark-400/50 md:block">&#x25CF;</p>
             <div className="p-14-medium md:p-16-medium flex gap-2">
-              <p className="text-dark-600">Aspect Ratio:</p>
-              <p className=" capitalize text-purple-400">{image.aspectRatio}</p>
+              <p className="text-dark-600">Credits Used:</p>
+              <p className=" capitalize text-purple-400">{job.quotedCredits}</p>
             </div>
           </>
         )}
@@ -83,15 +83,15 @@ const ImageDetails = async ({ params: { id } }: SearchParamProps) => {
           />
         </div>
 
-        {userId === image.author.clerkId && (
+        {userId === job.user.clerkId && (
           <div className="mt-4 space-y-4">
             <Button asChild type="button" className="submit-button capitalize">
-              <Link href={`/transformations/${image._id}/update`}>
-                Update Image
+              <Link href={`/transformations/${job.id}/update`}>
+                Update Job
               </Link>
             </Button>
 
-            <DeleteConfirmation imageId={image._id} />
+            <DeleteConfirmation imageId={job.id} />
           </div>
         )}
       </section>

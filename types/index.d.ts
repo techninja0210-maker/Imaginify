@@ -136,3 +136,66 @@ declare type TransformedImageProps = {
   hasDownload?: boolean;
   setIsTransforming?: React.Dispatch<React.SetStateAction<boolean>>;
 };
+
+// ====== JOB PARAMS (New for ShoppableVideos)
+declare type AddJobParams = {
+  job: {
+    title: string;
+    description?: string;
+    workflowType: string;
+    status?: string;
+    quotedCredits?: number;
+    quotedAt?: Date;
+    confirmedAt?: Date;
+    startedAt?: Date;
+    completedAt?: Date;
+    failedAt?: Date;
+    totalInternalCostUsd?: number;
+    totalRetailCostCredits?: number;
+    resultUrl?: string;
+    errorMessage?: string;
+    metadata?: any;
+  };
+  userId: string;
+  organizationId: string;
+  path: string;
+};
+
+declare type UpdateJobParams = {
+  job: {
+    id: string;
+    title?: string;
+    description?: string;
+    status?: string;
+    quotedCredits?: number;
+    quotedAt?: Date;
+    confirmedAt?: Date;
+    startedAt?: Date;
+    completedAt?: Date;
+    failedAt?: Date;
+    totalInternalCostUsd?: number;
+    totalRetailCostCredits?: number;
+    resultUrl?: string;
+    errorMessage?: string;
+    metadata?: any;
+  };
+  userId: string;
+  path: string;
+};
+
+declare type CreateJobQuoteParams = {
+  organizationId: string;
+  userId: string;
+  workflowType: string;
+  parameters: any;
+  totalCredits: number;
+  breakdown: any;
+  expiresAt: Date;
+};
+
+declare type WorkflowTypeKey =
+  | "text_to_image"
+  | "image_to_video"
+  | "text_to_video"
+  | "product_video"
+  | "ugc_video";

@@ -3,9 +3,8 @@
 import { redirect } from 'next/navigation'
 import Stripe from "stripe";
 import { handleError } from '../utils';
-import { connectToDatabase } from '../database/mongoose';
-import Transaction from '../database/models/transaction.model';
-import { updateCredits } from './user.actions';
+import { prisma } from '../database/prisma';
+import { updateCredits, getUserOrganizationId } from './user.actions';
 
 export async function checkoutCredits(transaction: CheckoutTransactionParams) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
@@ -40,14 +39,23 @@ export async function checkoutCredits(transaction: CheckoutTransactionParams) {
 
 export async function createTransaction(transaction: CreateTransactionParams) {
   try {
-    await connectToDatabase();
+    // Get user's organization ID
+    const organizationId = await getUserOrganizationId(transaction.buyerId);
+    
+    // Create transaction
+    const newTransaction = await prisma.transaction.create({
+      data: {
+        userId: transaction.buyerId,
+        stripeId: transaction.stripeId,
+        amount: transaction.amount,
+        plan: transaction.plan,
+        credits: transaction.credits,
+        status: 'completed'
+      }
+    });
 
-    // Create a new transaction with a buyerId
-    const newTransaction = await Transaction.create({
-      ...transaction, buyer: transaction.buyerId
-    })
-
-    await updateCredits(transaction.buyerId, transaction.credits);
+    // Update credits using the new ledger system
+    await updateCredits(organizationId, transaction.credits, `Purchase: ${transaction.plan}`);
 
     return JSON.parse(JSON.stringify(newTransaction));
   } catch (error) {

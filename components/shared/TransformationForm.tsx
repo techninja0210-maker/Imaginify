@@ -31,7 +31,7 @@ import MediaUploader from "./MediaUploader"
 import TransformedImage from "./TransformedImage"
 import { updateCredits } from "@/lib/actions/user.actions"
 import { getCldImageUrl } from "next-cloudinary"
-import { addImage, updateImage } from "@/lib/actions/image.actions"
+import { addJob, updateJob } from "@/lib/actions/job.actions"
 import { useRouter } from "next/navigation"
 import { InsufficientCreditsModal } from "./InsufficientCreditsModal"
  
@@ -95,17 +95,14 @@ const TransformationForm = ({ action, data = null, userId, type, creditBalance, 
 
       if(action === 'Add') {
         try {
-          const newImage = await addImage({
-            image: imageData,
-            userId,
-            path: '/'
-          })
-
-          if(newImage) {
-            form.reset()
-            setImage(data)
-            router.push(`/transformations/${newImage._id}`)
-          }
+          // TODO: Update to use job actions for ShoppableVideos
+          console.log('Add job functionality - to be implemented');
+          // const newJob = await addJob({
+          //   job: imageData,
+          //   userId,
+          //   organizationId: 'temp',
+          //   path: '/'
+          // })
         } catch (error) {
           console.log(error);
         }
@@ -113,18 +110,16 @@ const TransformationForm = ({ action, data = null, userId, type, creditBalance, 
 
       if(action === 'Update') {
         try {
-          const updatedImage = await updateImage({
-            image: {
-              ...imageData,
-              _id: data._id
-            },
-            userId,
-            path: `/transformations/${data._id}`
-          })
-
-          if(updatedImage) {
-            router.push(`/transformations/${updatedImage._id}`)
-          }
+          // TODO: Update to use job actions for ShoppableVideos
+          console.log('Update job functionality - to be implemented');
+          // const updatedJob = await updateJob({
+          //   job: {
+          //     ...imageData,
+          //     id: data.id
+          //   },
+          //   userId,
+          //   path: `/transformations/${data.id}`
+          // })
         } catch (error) {
           console.log(error);
         }

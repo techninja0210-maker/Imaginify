@@ -1,8 +1,7 @@
 /* eslint-disable camelcase */
 import { createTransaction } from "@/lib/actions/transaction.action";
 import { NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/database/mongoose";
-import User from "@/lib/database/models/user.model";
+import { prisma } from "@/lib/database/prisma";
 import stripe from "stripe";
 
 export async function POST(request: Request) {
@@ -39,12 +38,10 @@ export async function POST(request: Request) {
     // Persist Stripe customer ID on the user for future billing portal access
     try {
       if (metadata?.clerkUserId && customerId) {
-        await connectToDatabase();
-        await User.findOneAndUpdate(
-          { clerkId: metadata.clerkUserId },
-          { stripeCustomerId: customerId },
-          { new: true }
-        );
+        await prisma.user.update({
+          where: { clerkId: metadata.clerkUserId },
+          data: { stripeCustomerId: customerId }
+        });
       }
     } catch (e) {
       // no-op: we still record the transaction

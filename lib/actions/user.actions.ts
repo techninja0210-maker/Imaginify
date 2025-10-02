@@ -2,16 +2,51 @@
 
 import { revalidatePath } from "next/cache";
 
-import User from "../database/models/user.model";
-import { connectToDatabase } from "../database/mongoose";
+import { prisma } from "../database/prisma";
 import { handleError } from "../utils";
 
 // CREATE
 export async function createUser(user: CreateUserParams) {
   try {
-    await connectToDatabase();
-
-    const newUser = await User.create(user);
+    // Create user with organization and initial credit balance
+    const newUser = await prisma.user.create({
+      data: {
+        clerkId: user.clerkId,
+        email: user.email,
+        username: user.username,
+        photo: user.photo,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        // Create organization for the user
+        organizationMembers: {
+          create: {
+            organization: {
+              create: {
+                clerkId: `org_${user.clerkId}`,
+                name: `${user.firstName} ${user.lastName}'s Organization`,
+                credits: {
+                  create: {
+                    balance: 10 // Default starting credits
+                  }
+                }
+              }
+            },
+            role: 'owner'
+          }
+        }
+      },
+      include: {
+        organizationMembers: {
+          include: {
+            organization: {
+              include: {
+                credits: true
+              }
+            }
+          }
+        }
+      }
+    });
 
     return JSON.parse(JSON.stringify(newUser));
   } catch (error) {
@@ -22,9 +57,20 @@ export async function createUser(user: CreateUserParams) {
 // READ
 export async function getUserById(userId: string) {
   try {
-    await connectToDatabase();
-
-    const user = await User.findOne({ clerkId: userId });
+    const user = await prisma.user.findUnique({
+      where: { clerkId: userId },
+      include: {
+        organizationMembers: {
+          include: {
+            organization: {
+              include: {
+                credits: true
+              }
+            }
+          }
+        }
+      }
+    });
 
     if (!user) throw new Error("User not found");
 
@@ -37,14 +83,27 @@ export async function getUserById(userId: string) {
 // UPDATE
 export async function updateUser(clerkId: string, user: UpdateUserParams) {
   try {
-    await connectToDatabase();
-
-    const updatedUser = await User.findOneAndUpdate({ clerkId }, user, {
-      new: true,
+    const updatedUser = await prisma.user.update({
+      where: { clerkId },
+      data: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+        photo: user.photo,
+      },
+      include: {
+        organizationMembers: {
+          include: {
+            organization: {
+              include: {
+                credits: true
+              }
+            }
+          }
+        }
+      }
     });
 
-    if (!updatedUser) throw new Error("User update failed");
-    
     return JSON.parse(JSON.stringify(updatedUser));
   } catch (error) {
     handleError(error);
@@ -54,39 +113,68 @@ export async function updateUser(clerkId: string, user: UpdateUserParams) {
 // DELETE
 export async function deleteUser(clerkId: string) {
   try {
-    await connectToDatabase();
-
-    // Find user to delete
-    const userToDelete = await User.findOne({ clerkId });
-
-    if (!userToDelete) {
-      throw new Error("User not found");
-    }
-
-    // Delete user
-    const deletedUser = await User.findByIdAndDelete(userToDelete._id);
+    // Delete user (cascade will handle related records)
+    const deletedUser = await prisma.user.delete({
+      where: { clerkId }
+    });
+    
     revalidatePath("/");
 
-    return deletedUser ? JSON.parse(JSON.stringify(deletedUser)) : null;
+    return JSON.parse(JSON.stringify(deletedUser));
   } catch (error) {
     handleError(error);
   }
 }
 
-// USE CREDITS
-export async function updateCredits(userId: string, creditFee: number) {
+// USE CREDITS (Updated for new ledger system)
+export async function updateCredits(organizationId: string, creditFee: number, reason: string = "Credit usage") {
   try {
-    await connectToDatabase();
+    // Use transaction to ensure atomicity
+    const result = await prisma.$transaction(async (tx) => {
+      // Create ledger entry
+      await tx.creditLedger.create({
+        data: {
+          organizationId,
+          type: creditFee > 0 ? 'allocation' : 'deduction',
+          amount: creditFee,
+          reason
+        }
+      });
 
-    const updatedUserCredits = await User.findOneAndUpdate(
-      { _id: userId },
-      { $inc: { creditBalance: creditFee }},
-      { new: true }
-    )
+      // Update balance
+      const updatedBalance = await tx.creditBalance.update({
+        where: { organizationId },
+        data: { balance: { increment: creditFee } }
+      });
 
-    if(!updatedUserCredits) throw new Error("User credits update failed");
+      return updatedBalance;
+    });
 
-    return JSON.parse(JSON.stringify(updatedUserCredits));
+    return JSON.parse(JSON.stringify(result));
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+// GET USER'S ORGANIZATION ID
+export async function getUserOrganizationId(userId: string) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { clerkId: userId },
+      include: {
+        organizationMembers: {
+          include: {
+            organization: true
+          }
+        }
+      }
+    });
+
+    if (!user || !user.organizationMembers.length) {
+      throw new Error("User organization not found");
+    }
+
+    return user.organizationMembers[0].organization.id;
   } catch (error) {
     handleError(error);
   }
