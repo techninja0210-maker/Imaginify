@@ -55,8 +55,8 @@ export const Collection = ({
 
       {images.length > 0 ? (
         <ul className="collection-list">
-          {images.map((image) => (
-            <Card image={image} key={image._id} />
+          {images.map((job) => (
+            <Card image={job} key={job.id} />
           ))}
         </ul>
       ) : (
@@ -94,34 +94,23 @@ export const Collection = ({
   );
 };
 
-const Card = ({ image }: { image: any }) => { // TODO: Update to proper Job type
+const Card = ({ image }: { image: any }) => { // TODO: Rename props to job and type properly
   return (
     <li>
-      <Link href={`/transformations/${image._id}`} className="collection-card">
-        <CldImage
-          src={image.publicId}
+      <Link href={`/transformations/${image.id}`} className="collection-card">
+        <Image
+          src={image?.metadata?.secureURL || "/assets/images/placeholder.jpg"}
           alt={image.title}
-          width={image.width}
-          height={image.height}
-          {...image.config}
+          width={400}
+          height={208}
           loading="lazy"
           className="h-52 w-full rounded-[10px] object-cover"
-          sizes="(max-width: 767px) 100vw, (max-width: 1279px) 50vw, 33vw"
         />
         <div className="flex-between">
           <p className="p-20-semibold mr-3 line-clamp-1 text-dark-600">
             {image.title}
           </p>
-          <Image
-            src={`/assets/icons/${
-              transformationTypes[
-                image.transformationType as TransformationTypeKey
-              ].icon
-            }`}
-            alt={image.title}
-            width={24}
-            height={24}
-          />
+          <span className="p-14-medium text-dark-500 capitalize">{image.workflowType}</span>
         </div>
       </Link>
     </li>

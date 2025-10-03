@@ -13,6 +13,13 @@ const AddTransformationTypePage = async ({ params: { type } }: SearchParamProps)
 
   const user = await getUserById(userId);
 
+  const organizationId =
+    user?.organizationMembers?.[0]?.organizationId ||
+    user?.organizationMembers?.[0]?.organization?.id;
+
+  const creditBalance =
+    user?.organizationMembers?.[0]?.organization?.credits?.[0]?.balance || 0;
+
   return (
     <>
       <Header 
@@ -23,9 +30,10 @@ const AddTransformationTypePage = async ({ params: { type } }: SearchParamProps)
       <section className="mt-10">
         <TransformationForm 
           action="Add"
-          userId={user._id}
+          userId={user.id}
+          organizationId={organizationId}
           type={transformation.type as TransformationTypeKey}
-          creditBalance={user.creditBalance}
+          creditBalance={creditBalance}
         />
       </section>
     </>

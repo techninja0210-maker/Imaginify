@@ -43,7 +43,7 @@ export const formSchema = z.object({
   publicId: z.string(),
 })
 
-const TransformationForm = ({ action, data = null, userId, type, creditBalance, config = null }: TransformationFormProps) => {
+const TransformationForm = ({ action, data = null, userId, organizationId, type, creditBalance, config = null }: TransformationFormProps) => {
   const transformationType = transformationTypes[type];
   const [image, setImage] = useState(data)
   const [newTransformation, setNewTransformation] = useState<Transformations | null>(null);
@@ -79,47 +79,64 @@ const TransformationForm = ({ action, data = null, userId, type, creditBalance, 
         ...transformationConfig
       })
 
-      const imageData = {
+      const jobPayload = {
         title: values.title,
-        publicId: image?.publicId,
-        transformationType: type,
-        width: image?.width,
-        height: image?.height,
-        config: transformationConfig,
-        secureURL: image?.secureURL,
-        transformationURL: transformationUrl,
-        aspectRatio: values.aspectRatio,
-        prompt: values.prompt,
-        color: values.color,
+        description: `Generated via ${type}`,
+        workflowType: type,
+        status: 'pending',
+        metadata: {
+          publicId: image?.publicId,
+          width: image?.width,
+          height: image?.height,
+          secureURL: image?.secureURL,
+          transformationURL: transformationUrl,
+          aspectRatio: values.aspectRatio,
+          prompt: values.prompt,
+          color: values.color,
+          config: transformationConfig,
+        }
       }
 
       if(action === 'Add') {
         try {
-          // TODO: Update to use job actions for ShoppableVideos
-          console.log('Add job functionality - to be implemented');
-          // const newJob = await addJob({
-          //   job: imageData,
-          //   userId,
-          //   organizationId: 'temp',
-          //   path: '/'
-          // })
+          if (!organizationId) {
+            console.error('Missing organizationId for job creation');
+            setIsSubmitting(false);
+            return;
+          }
+          const newJob = await addJob({
+            job: jobPayload,
+            userId,
+            organizationId,
+            path: '/'
+          })
+
+          if(newJob) {
+            form.reset()
+            setImage(data)
+            router.push(`/transformations/${newJob.id}`)
+          }
         } catch (error) {
           console.log(error);
         }
       }
 
-      if(action === 'Update') {
+      if(action === 'Update' && data?.id) {
         try {
-          // TODO: Update to use job actions for ShoppableVideos
-          console.log('Update job functionality - to be implemented');
-          // const updatedJob = await updateJob({
-          //   job: {
-          //     ...imageData,
-          //     id: data.id
-          //   },
-          //   userId,
-          //   path: `/transformations/${data.id}`
-          // })
+          const updatedJob = await updateJob({
+            job: {
+              id: data.id,
+              title: jobPayload.title,
+              description: jobPayload.description,
+              metadata: jobPayload.metadata,
+            },
+            userId,
+            path: `/transformations/${data.id}`
+          })
+
+          if(updatedJob) {
+            router.push(`/transformations/${updatedJob.id}`)
+          }
         } catch (error) {
           console.log(error);
         }
