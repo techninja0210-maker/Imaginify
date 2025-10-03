@@ -202,7 +202,7 @@ const TransformationForm = ({ action, data = null, userId, organizationId, type,
         <CustomField 
           control={form.control}
           name="title"
-          formLabel="Image Title"
+          formLabel="Job Title"
           className="w-full"
           render={({ field }) => <Input {...field} className="input-field" />}
         />
@@ -319,7 +319,7 @@ const TransformationForm = ({ action, data = null, userId, organizationId, type,
             className="submit-button capitalize"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Submitting...' : 'Save Image'}
+            {isSubmitting ? 'Submitting...' : 'Save Job'}
           </Button>
         </div>
       </form>

@@ -139,47 +139,49 @@ declare type TransformedImageProps = {
 };
 
 // ====== JOB PARAMS (New for ShoppableVideos)
+declare interface JobMetadata {
+  publicId?: string;
+  width?: number;
+  height?: number;
+  secureURL?: string;
+  transformationURL?: string;
+  aspectRatio?: string;
+  prompt?: string;
+  color?: string;
+  config?: any;
+}
+
+declare interface Job {
+  id: string;
+  organizationId: string;
+  userId: string;
+  title: string;
+  description?: string | null;
+  workflowType: string;
+  status: string;
+  quotedCredits?: number | null;
+  quotedAt?: Date | null;
+  confirmedAt?: Date | null;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+  failedAt?: Date | null;
+  totalInternalCostUsd?: number | null;
+  totalRetailCostCredits?: number | null;
+  resultUrl?: string | null;
+  errorMessage?: string | null;
+  metadata?: JobMetadata | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 declare type AddJobParams = {
-  job: {
-    title: string;
-    description?: string;
-    workflowType: string;
-    status?: string;
-    quotedCredits?: number;
-    quotedAt?: Date;
-    confirmedAt?: Date;
-    startedAt?: Date;
-    completedAt?: Date;
-    failedAt?: Date;
-    totalInternalCostUsd?: number;
-    totalRetailCostCredits?: number;
-    resultUrl?: string;
-    errorMessage?: string;
-    metadata?: any;
-  };
+  job: Pick<Job, 'title' | 'description' | 'workflowType' | 'status'> & { metadata?: JobMetadata };
   userId: string;
   organizationId: string;
   path: string;
 };
 
 declare type UpdateJobParams = {
-  job: {
-    id: string;
-    title?: string;
-    description?: string;
-    status?: string;
-    quotedCredits?: number;
-    quotedAt?: Date;
-    confirmedAt?: Date;
-    startedAt?: Date;
-    completedAt?: Date;
-    failedAt?: Date;
-    totalInternalCostUsd?: number;
-    totalRetailCostCredits?: number;
-    resultUrl?: string;
-    errorMessage?: string;
-    metadata?: any;
-  };
+  job: Partial<Omit<Job, 'organizationId' | 'userId' | 'createdAt' | 'updatedAt'>> & { id: string; metadata?: JobMetadata };
   userId: string;
   path: string;
 };

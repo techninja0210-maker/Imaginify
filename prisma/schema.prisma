@@ -1,6 +1,3 @@
-// This is an example Prisma schema for ShoppableVideos.com
-// Replace the existing schema.prisma with this
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,194 +7,156 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Organizations (Clerk Organizations support)
-model Organization {
-  id        String   @id @default(cuid())
-  clerkId   String   @unique
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model User {
+  id                  String               @id @default(cuid())
+  clerkId             String               @unique
+  email               String               @unique
+  username            String               @unique
+  photo               String
+  firstName           String?
+  lastName            String?
+  stripeCustomerId    String?
+  planId              Int                  @default(1)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  ledger              CreditLedger[]
+  jobQuotes           JobQuote[]
+  jobs                Job[]
+  organizationMembers OrganizationMember[]
+  transactions        Transaction[]
 
-  // Relations
-  members   OrganizationMember[]
-  credits   CreditBalance[]
+  @@map("users")
+}
+
+model Organization {
+  id        String               @id @default(cuid())
+  clerkId   String               @unique
+  name      String
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  credits   CreditBalance?
   ledger    CreditLedger[]
-  jobs      Job[]
-  priceBook PriceBookEntry[]
   jobQuotes JobQuote[]
+  jobs      Job[]
+  members   OrganizationMember[]
+  priceBook PriceBookEntry[]
 
   @@map("organizations")
 }
 
-// Organization Members (users belong to orgs)
 model OrganizationMember {
-  id             String @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   userId         String
-  role           String @default("member") // member, admin, owner
-  createdAt      DateTime @default(now())
-
-  // Relations
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("member")
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, userId])
   @@map("organization_members")
 }
 
-// Users (enhanced from current User model)
-model User {
-  id              String   @id @default(cuid())
-  clerkId         String   @unique
-  email           String   @unique
-  username        String   @unique
-  photo           String
-  firstName       String?
-  lastName        String?
-  stripeCustomerId String?
-  planId          Int      @default(1)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  // Relations
-  organizationMembers OrganizationMember[]
-  transactions        Transaction[]
-  jobs                Job[]
-  ledger              CreditLedger[]
-  jobQuotes           JobQuote[]
-
-  @@map("users")
-}
-
-// Credit Balance (replaces simple creditBalance field)
 model CreditBalance {
-  id             String @id @default(cuid())
-  organizationId String
-  balance        Int    @default(0)
-  lowBalanceThreshold Int @default(10)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                  String       @id @default(cuid())
+  organizationId      String       @unique
+  balance             Int          @default(0)
+  lowBalanceThreshold Int          @default(10)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  // Relations
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId])
   @@map("credit_balances")
 }
 
-// Enhanced Credit Ledger (replaces simple credit system)
 model CreditLedger {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  userId         String?  // Optional: can be org-wide or user-specific
-  jobId          String?  // Links to job/workflow
-  type           String   // "allocation", "deduction", "refund"
-  amount         Int      // Credits (positive for allocation/refund, negative for deduction)
-  reason         String   // Description of the transaction
-  metadata       Json?    // Additional data (stripe info, job details, etc.)
-  createdAt      DateTime @default(now())
-
-  // Relations
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User?        @relation(fields: [userId], references: [id])
+  userId         String?
+  jobId          String?
+  type           String
+  amount         Int
+  reason         String
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id])
 
   @@map("credit_ledger")
 }
 
-// Price Book (configurable pricing)
 model PriceBookEntry {
-  id             String @id @default(cuid())
-  organizationId String
-  actionKey      String // e.g., "text_to_image", "image_to_video"
-  unitType       String // e.g., "per_image", "per_minute", "per_1k_tokens"
-  unitStep       Int    @default(1)
-  retailCostPerUnit Int // Credits charged to user
-  internalCostFormula String // JSON formula for internal cost calculation
-  isActive       Boolean @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  // Relations
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                  String       @id @default(cuid())
+  organizationId      String
+  actionKey           String
+  unitType            String
+  unitStep            Int          @default(1)
+  retailCostPerUnit   Int
+  internalCostFormula String
+  isActive            Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, actionKey])
   @@map("price_book")
 }
 
-// Jobs (replaces Image model - for video generation workflows)
 model Job {
-  id             String   @id @default(cuid())
-  organizationId String
-  userId         String
-  workflowId     String?  // External workflow identifier
-  status         String   @default("pending") // pending, quoted, confirmed, running, completed, failed, refunded
-  title          String
-  description    String?
-  
-  // Quote information
-  quotedCredits  Int?
-  quotedAt       DateTime?
-  confirmedAt    DateTime?
-  
-  // Execution information
-  startedAt      DateTime?
-  completedAt    DateTime?
-  failedAt       DateTime?
-  
-  // Cost tracking
-  totalInternalCostUsd    Float?
-  totalRetailCostCredits  Int?
-  
-  // Results
-  resultUrl      String?
-  errorMessage   String?
-  
-  // Metadata
-  metadata       Json?    // Workflow parameters, results, etc.
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  // Relations
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id])
+  id                     String       @id @default(cuid())
+  organizationId         String
+  userId                 String
+  workflowId             String?
+  status                 String       @default("pending")
+  title                  String
+  description            String?
+  quotedCredits          Int?
+  quotedAt               DateTime?
+  confirmedAt            DateTime?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  failedAt               DateTime?
+  totalInternalCostUsd   Float?
+  totalRetailCostCredits Int?
+  resultUrl              String?
+  errorMessage           String?
+  metadata               Json?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                   User         @relation(fields: [userId], references: [id])
 
   @@map("jobs")
 }
 
-// Transactions (enhanced from current Transaction model)
 model Transaction {
-  id             String   @id @default(cuid())
-  userId         String
-  stripeId       String   @unique
-  amount         Float
-  plan           String?
-  credits        Int?
-  status         String   @default("completed") // pending, completed, failed, refunded
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  userId    String
+  stripeId  String   @unique
+  amount    Float
+  plan      String?
+  credits   Int?
+  status    String   @default("completed")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("transactions")
 }
 
-// Job Quotes (for quote → confirm → execute flow)
 model JobQuote {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   userId         String
   workflowType   String
-  parameters     Json     // Workflow parameters
+  parameters     Json
   totalCredits   Int
-  breakdown      Json     // Detailed cost breakdown
+  breakdown      Json
   expiresAt      DateTime
-  status         String   @default("active") // active, used, expired
-  createdAt      DateTime @default(now())
-
-  // Relations
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id])
+  status         String       @default("active")
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id])
 
   @@map("job_quotes")
 }

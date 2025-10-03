@@ -11,6 +11,8 @@ export async function addJob({ job, userId, organizationId, path }: AddJobParams
     const newJob = await prisma.job.create({
       data: {
         ...job,
+        // Ensure metadata conforms to Prisma Json type expectations
+        metadata: (job as any).metadata as any,
         userId,
         organizationId,
       },
@@ -47,7 +49,10 @@ export async function updateJob({ job, userId, path }: UpdateJobParams) {
 
     const updatedJob = await prisma.job.update({
       where: { id: job.id },
-      data: job,
+      data: {
+        ...(job as any),
+        metadata: (job as any).metadata as any,
+      },
       include: {
         user: {
           select: {

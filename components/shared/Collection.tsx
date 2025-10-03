@@ -12,7 +12,6 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { transformationTypes } from "@/constants";
-// import { IImage } from "@/lib/database/models/image.model"; // Removed - using Job type now
 import { formUrlQuery } from "@/lib/utils";
 
 import { Button } from "../ui/button";
@@ -25,7 +24,7 @@ export const Collection = ({
   totalPages = 1,
   page,
 }: {
-  images: any[]; // TODO: Update to proper Job type
+  images: Job[];
   totalPages?: number;
   page: number;
   hasSearch?: boolean;
@@ -94,7 +93,7 @@ export const Collection = ({
   );
 };
 
-const Card = ({ image }: { image: any }) => { // TODO: Rename props to job and type properly
+const Card = ({ image }: { image: Job }) => {
   return (
     <li>
       <Link href={`/transformations/${image.id}`} className="collection-card">
