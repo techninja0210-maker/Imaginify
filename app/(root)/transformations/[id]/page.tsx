@@ -64,21 +64,21 @@ const ImageDetails = async ({ params: { id } }: SearchParamProps) => {
             <h3 className="h3-bold text-dark-600">Original</h3>
 
             <Image
-              width={getImageSize(image.transformationType, image, "width")}
-              height={getImageSize(image.transformationType, image, "height")}
-              src={image.secureURL}
-              alt="image"
+              width={400}
+              height={400}
+              src="/assets/images/placeholder.jpg"
+              alt="job"
               className="transformation-original_image"
             />
           </div>
 
           {/* TRANSFORMED IMAGE */}
           <TransformedImage
-            image={image}
-            type={image.transformationType}
-            title={image.title}
+            image={job}
+            type={job.workflowType}
+            title={job.title}
             isTransforming={false}
-            transformationConfig={image.config}
+            transformationConfig={job.metadata}
             hasDownload={true}
           />
         </div>

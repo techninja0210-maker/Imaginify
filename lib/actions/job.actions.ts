@@ -323,7 +323,7 @@ export async function confirmJobQuote(quoteId: string, userId: string) {
           quotedAt: new Date(),
           confirmedAt: new Date(),
           status: 'confirmed',
-          metadata: quote.parameters
+          metadata: quote.parameters as any
         }
       });
 

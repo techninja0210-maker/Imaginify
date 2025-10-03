@@ -55,7 +55,9 @@ export async function createTransaction(transaction: CreateTransactionParams) {
     });
 
     // Update credits using the new ledger system
-    await updateCredits(organizationId, transaction.credits, `Purchase: ${transaction.plan}`);
+    if (organizationId && transaction.credits) {
+      await updateCredits(organizationId, transaction.credits, `Purchase: ${transaction.plan}`);
+    }
 
     return JSON.parse(JSON.stringify(newTransaction));
   } catch (error) {
