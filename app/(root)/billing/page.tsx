@@ -57,7 +57,7 @@ const BillingPage = async () => {
         <div className="grid gap-3">
           <div className="p-16-regular">Current plan: <span className="text-purple-500">{currentPlan ?? (customerId ? "No active subscription" : "Not linked yet")}</span></div>
           <div className="p-16-regular">Renews on: <span className="text-purple-500">{renewsOn ?? "—"}</span></div>
-          <div className="p-16-regular">Credits: <span className="text-purple-500">{typeof user?.creditBalance === "number" ? user.creditBalance : 0}</span></div>
+          <div className="p-16-regular">Credits: <span className="text-purple-500">{user?.organizationMembers?.[0]?.organization?.credits?.balance || 0}</span></div>
         </div>
 
         {/* Direct link to Stripe Billing Portal (provided URL) */}

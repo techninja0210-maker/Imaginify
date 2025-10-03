@@ -31,12 +31,12 @@ const Profile = async ({ searchParams }: SearchParamProps) => {
               height={50}
               className="size-9 md:size-12"
             />
-            <h2 className="h2-bold text-dark-600">{user.organizationMembers?.[0]?.organization?.credits?.[0]?.balance || 0}</h2>
+            <h2 className="h2-bold text-dark-600">{user.organizationMembers?.[0]?.organization?.credits?.balance || 0}</h2>
           </div>
         </div>
 
         <div className="profile-image-manipulation">
-          <p className="p-14-medium md:p-16-medium">IMAGE MANIPULATION DONE</p>
+          <p className="p-14-medium md:p-16-medium">VIDEO GENERATION DONE</p>
           <div className="mt-4 flex items-center gap-4">
             <Image
               src="/assets/icons/photo.svg"

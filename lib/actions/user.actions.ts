@@ -57,7 +57,7 @@ export async function createUser(user: CreateUserParams) {
 // READ
 export async function getUserById(userId: string) {
   try {
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { clerkId: userId },
       include: {
         organizationMembers: {
@@ -72,7 +72,25 @@ export async function getUserById(userId: string) {
       }
     });
 
-    if (!user) throw new Error("User not found");
+    // If user doesn't exist, create them (for development/testing)
+    if (!user) {
+      console.log(`User ${userId} not found, creating new user...`);
+      
+      // Get user info from Clerk
+      const { clerkClient } = await import('@clerk/nextjs/server');
+      const clerkUser = await clerkClient.users.getUser(userId);
+      
+      const newUserData = {
+        clerkId: clerkUser.id,
+        email: clerkUser.emailAddresses[0].emailAddress,
+        username: clerkUser.username || `user_${clerkUser.id.slice(0, 8)}`,
+        firstName: clerkUser.firstName || 'User',
+        lastName: clerkUser.lastName || 'Name',
+        photo: clerkUser.imageUrl,
+      };
+
+      user = await createUser(newUserData);
+    }
 
     return JSON.parse(JSON.stringify(user));
   } catch (error) {
