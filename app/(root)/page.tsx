@@ -5,6 +5,12 @@ import { getUserById } from "@/lib/actions/user.actions"
 import { auth } from "@clerk/nextjs"
 import Image from "next/image"
 import Link from "next/link"
+import { prisma } from "@/lib/database/prisma"
+import Stripe from "stripe"
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2023-10-16",
+})
 
 const Home = async ({ searchParams }: SearchParamProps) => {
   const { userId } = auth();
@@ -17,6 +23,49 @@ const Home = async ({ searchParams }: SearchParamProps) => {
   const user = userId ? await getUserById(userId) : null;
   const credits = user?.organizationMembers?.[0]?.organization?.credits?.balance || 0;
 
+  // Get subscription and billing info
+  let currentPlan = "Free";
+  let renewsOn = null;
+  let autoTopUpInfo = null;
+
+  if (user?.stripeCustomerId) {
+    try {
+      const customer = await stripe.customers.retrieve(user.stripeCustomerId);
+      if (customer && !customer.deleted) {
+        const subscriptions = await stripe.subscriptions.list({
+          customer: user.stripeCustomerId,
+          status: 'active',
+          limit: 1,
+        });
+
+        if (subscriptions.data.length > 0) {
+          const sub = subscriptions.data[0];
+          const item = sub.items.data[0];
+          const price: any = item?.price;
+          const product: any = price?.product;
+          currentPlan = price?.nickname || product?.name || price?.id || "Active Subscription";
+          if (sub.current_period_end) {
+            renewsOn = new Date(sub.current_period_end * 1000).toLocaleDateString();
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching subscription info:", error);
+    }
+  }
+
+  // Get auto top-up info
+  const orgId = user?.organizationMembers?.[0]?.organization?.id as string | undefined;
+  if (orgId) {
+    try {
+      autoTopUpInfo = await prisma.creditBalance.findUnique({ 
+        where: { organizationId: orgId } 
+      });
+    } catch (error) {
+      console.error("Error fetching auto top-up info:", error);
+    }
+  }
+
   return (
     <>
       {userId ? (
@@ -26,10 +75,41 @@ const Home = async ({ searchParams }: SearchParamProps) => {
             <h1 className="home-heading text-white">Welcome to Your Video Studio</h1>
             <p className="p-16-regular mt-2 opacity-90">Start a workflow directly from here.</p>
 
-            {/* Credits pill */}
-            <div className="absolute right-6 top-6 rounded-full bg-white/90 px-4 py-2 text-dark-600 shadow-sm backdrop-blur-md">
-              <span className="p-14-medium">Credits:</span>
-              <span className="p-16-medium ml-2">{typeof credits === 'number' ? credits : '—'}</span>
+            {/* Credits and subscription info */}
+            <div className="absolute right-6 top-6 space-y-2">
+              {/* Credits pill */}
+              <div className="rounded-full bg-white/90 px-4 py-2 text-dark-600 shadow-sm backdrop-blur-md">
+                <span className="p-14-medium">Credits:</span>
+                <span className="p-16-medium ml-2">{typeof credits === 'number' ? credits : '—'}</span>
+              </div>
+              
+              {/* Plan info */}
+              <div className="rounded-full bg-white/90 px-4 py-2 text-dark-600 shadow-sm backdrop-blur-md">
+                <span className="p-14-medium">Plan:</span>
+                <span className="p-16-medium ml-2">{currentPlan}</span>
+              </div>
+              
+              {/* Renewal date */}
+              <div className="rounded-full bg-white/90 px-4 py-2 text-dark-600 shadow-sm backdrop-blur-md">
+                <span className="p-14-medium">Renews:</span>
+                <span className="p-16-medium ml-2">{renewsOn || "N/A"}</span>
+              </div>
+              
+              {/* Auto top-up status */}
+              {(() => {
+                const info: any = autoTopUpInfo;
+                const enabled = !!info?.autoTopUpEnabled;
+                const amount = info?.autoTopUpAmountCredits ?? 0;
+                const threshold = info?.lowBalanceThreshold ?? 0;
+                return (
+                  <div className="rounded-full bg-white/90 px-4 py-2 text-dark-600 shadow-sm backdrop-blur-md">
+                    <span className="p-14-medium">Auto top-up:</span>
+                    <span className="p-16-medium ml-2">
+                      {enabled ? `${amount} at ${threshold}` : "Disabled"}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Primary CTA buttons inside hero */}
