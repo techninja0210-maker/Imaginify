@@ -11,7 +11,8 @@ import Stripe from "stripe";
 async function getStripeCustomerIdForUser(userId: string): Promise<string | null> {
   const user = await getUserById(userId);
   const orgId = user?.organizationMembers?.[0]?.organization?.id as string | undefined;
-  const autoTopUpInfo = orgId ? await prisma.creditBalance.findUnique({ where: { organizationId: orgId } }) : null;
+  const autoTopUpInfo: any = orgId ? await prisma.creditBalance.findUnique({ where: { organizationId: orgId } }) : null;
+  const auto = autoTopUpInfo as any;
   return user?.stripeCustomerId ?? null;
 }
 
@@ -65,7 +66,7 @@ const BillingPage = async () => {
           <div className="p-16-regular">Current plan: <span className="text-purple-500">{currentPlan ?? (customerId ? "No active subscription" : "Not linked yet")}</span></div>
           <div className="p-16-regular">Renews on: <span className="text-purple-500">{renewsOn ?? "—"}</span></div>
           <div className="p-16-regular">Credits: <span className="text-purple-500">{user?.organizationMembers?.[0]?.organization?.credits?.balance || 0}</span></div>
-          <div className="p-16-regular">Auto top-up: <span className="text-purple-500">{autoTopUpInfo?.autoTopUpEnabled ? `Enabled (${autoTopUpInfo.autoTopUpAmountCredits} credits at threshold ${autoTopUpInfo.lowBalanceThreshold})` : 'Disabled'}</span></div>
+          <div className="p-16-regular">Auto top-up: <span className="text-purple-500">{autoTopUpInfo?.autoTopUpEnabled ? `Enabled (${autoTopUpInfo?.autoTopUpAmountCredits ?? 0} credits at threshold ${autoTopUpInfo?.lowBalanceThreshold ?? 0})` : 'Disabled'}</span></div>
         </div>
 
         {/* Direct link to Stripe Billing Portal (provided URL) */}
