@@ -62,6 +62,8 @@ model CreditBalance {
   organizationId      String       @unique
   balance             Int          @default(0)
   lowBalanceThreshold Int          @default(10)
+  autoTopUpEnabled    Boolean      @default(false)
+  autoTopUpAmountCredits Int?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -78,6 +80,7 @@ model CreditLedger {
   amount         Int
   reason         String
   metadata       Json?
+  idempotencyKey String?      @unique
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User?        @relation(fields: [userId], references: [id])

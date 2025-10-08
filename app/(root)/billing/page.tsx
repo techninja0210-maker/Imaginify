@@ -1,6 +1,7 @@
 import Header from "@/components/shared/Header";
 import { Button } from "@/components/ui/button";
 import { openCustomerPortal, openCustomerPortalWithReturnUrl } from "@/lib/actions/subscription.actions";
+import { prisma } from "@/lib/database/prisma";
 import { getUserById } from "@/lib/actions/user.actions";
 import { auth } from "@clerk/nextjs";
 import { notFound, redirect } from "next/navigation";
@@ -9,6 +10,8 @@ import Stripe from "stripe";
 // Load Stripe customer ID from DB
 async function getStripeCustomerIdForUser(userId: string): Promise<string | null> {
   const user = await getUserById(userId);
+  const orgId = user?.organizationMembers?.[0]?.organization?.id as string | undefined;
+  const autoTopUpInfo = orgId ? await prisma.creditBalance.findUnique({ where: { organizationId: orgId } }) : null;
   return user?.stripeCustomerId ?? null;
 }
 
@@ -49,6 +52,10 @@ const BillingPage = async () => {
     }
   }
 
+  // auto top-up info for display
+  const orgId = user?.organizationMembers?.[0]?.organization?.id as string | undefined;
+  const autoTopUpInfo = orgId ? await prisma.creditBalance.findUnique({ where: { organizationId: orgId } }) : null;
+
   return (
     <>
       <Header title="Billing" subtitle="Manage your subscription and invoices" />
@@ -58,6 +65,7 @@ const BillingPage = async () => {
           <div className="p-16-regular">Current plan: <span className="text-purple-500">{currentPlan ?? (customerId ? "No active subscription" : "Not linked yet")}</span></div>
           <div className="p-16-regular">Renews on: <span className="text-purple-500">{renewsOn ?? "—"}</span></div>
           <div className="p-16-regular">Credits: <span className="text-purple-500">{user?.organizationMembers?.[0]?.organization?.credits?.balance || 0}</span></div>
+          <div className="p-16-regular">Auto top-up: <span className="text-purple-500">{autoTopUpInfo?.autoTopUpEnabled ? `Enabled (${autoTopUpInfo.autoTopUpAmountCredits} credits at threshold ${autoTopUpInfo.lowBalanceThreshold})` : 'Disabled'}</span></div>
         </div>
 
         {/* Direct link to Stripe Billing Portal (provided URL) */}

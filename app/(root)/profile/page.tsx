@@ -3,6 +3,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 
 import { Collection } from "@/components/shared/Collection";
+import { prisma } from "@/lib/database/prisma";
 import Header from "@/components/shared/Header";
 import { getUserJobs } from "@/lib/actions/job.actions";
 import { getUserById } from "@/lib/actions/user.actions";
@@ -15,6 +16,9 @@ const Profile = async ({ searchParams }: SearchParamProps) => {
 
   const user = await getUserById(userId);
   const jobs = await getUserJobs({ page, userId: user.id });
+
+  const orgId = user.organizationMembers?.[0]?.organization?.id as string | undefined;
+  const ledger = orgId ? await prisma.creditLedger.findMany({ where: { organizationId: orgId }, orderBy: { createdAt: 'desc' }, take: 10 }) : [];
 
   return (
     <>
@@ -35,18 +39,17 @@ const Profile = async ({ searchParams }: SearchParamProps) => {
           </div>
         </div>
 
-        <div className="profile-image-manipulation">
-          <p className="p-14-medium md:p-16-medium">VIDEO GENERATION DONE</p>
-          <div className="mt-4 flex items-center gap-4">
-            <Image
-              src="/assets/icons/photo.svg"
-              alt="coins"
-              width={50}
-              height={50}
-              className="size-9 md:size-12"
-            />
-            <h2 className="h2-bold text-dark-600">{jobs?.data.length}</h2>
-          </div>
+        <div className="profile-image-manipulation w-full">
+          <p className="p-14-medium md:p-16-medium">RECENT CREDIT ACTIVITY</p>
+          <ul className="mt-4 space-y-2">
+            {ledger.map((e: any) => (
+              <li key={e.id} className="flex-between collection-card p-3">
+                <span className="p-14-medium">{e.type} ({e.reason})</span>
+                <span className={`p-14-medium ${e.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>{e.amount}</span>
+              </li>
+            ))}
+            {!ledger.length && <li className="p-14-medium text-dark-400">No recent activity</li>}
+          </ul>
         </div>
       </section>
 

@@ -89,7 +89,7 @@ export async function getUserById(userId: string) {
         photo: clerkUser.imageUrl,
       };
 
-      user = await createUser(newUserData);
+      user = await createUser(newUserData as any);
     }
 
     return JSON.parse(JSON.stringify(user));
@@ -145,7 +145,7 @@ export async function deleteUser(clerkId: string) {
 }
 
 // USE CREDITS (Updated for new ledger system)
-export async function updateCredits(organizationId: string, creditFee: number, reason: string = "Credit usage") {
+export async function updateCredits(organizationId: string, creditFee: number, reason: string = "Credit usage", idempotencyKey?: string) {
   try {
     // Use transaction to ensure atomicity
     const result = await prisma.$transaction(async (tx) => {
@@ -155,7 +155,8 @@ export async function updateCredits(organizationId: string, creditFee: number, r
           organizationId,
           type: creditFee > 0 ? 'allocation' : 'deduction',
           amount: creditFee,
-          reason
+          reason,
+          idempotencyKey
         }
       });
 
