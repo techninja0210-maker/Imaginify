@@ -25,15 +25,12 @@ export async function POST(request: Request) {
   if (!process.env.STRIPE_SECRET_KEY) return NextResponse.json({ ok: false, error: "Missing STRIPE_SECRET_KEY" }, { status: 500 });
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-  // 1) Find all orgs that need top-up
-  const lowBalances = await prisma.creditBalance.findMany({
-    where: {
-      autoTopUpEnabled: true,
-      balance: { lt: prisma.creditBalance.fields.lowBalanceThreshold },
-    },
+  // 1) Find candidate balances and filter in JS to avoid Prisma type/version issues on deploy
+  const candidates: any[] = await prisma.creditBalance.findMany({
     include: { organization: { include: { members: { include: { user: true } } } } },
-    take: 50,
-  });
+    take: 200,
+  }) as any;
+  const lowBalances = candidates.filter((cb: any) => cb?.autoTopUpEnabled && typeof cb?.balance === 'number' && typeof cb?.lowBalanceThreshold === 'number' && cb.balance < cb.lowBalanceThreshold).slice(0, 50);
 
   const results: any[] = [];
 
