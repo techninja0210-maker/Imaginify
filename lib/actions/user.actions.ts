@@ -154,15 +154,14 @@ export async function updateCredits(organizationId: string, creditFee: number, r
     // Use transaction to ensure atomicity
     const result = await prisma.$transaction(async (tx) => {
       // Create ledger entry
-      await tx.creditLedger.create({
-        data: {
-          organizationId,
-          type: creditFee > 0 ? 'allocation' : 'deduction',
-          amount: creditFee,
-          reason,
-          idempotencyKey
-        }
-      });
+      const ledgerData: any = {
+        organizationId,
+        type: creditFee > 0 ? 'allocation' : 'deduction',
+        amount: creditFee,
+        reason,
+      };
+      if (idempotencyKey) ledgerData.idempotencyKey = idempotencyKey;
+      await tx.creditLedger.create({ data: ledgerData });
 
       // Update balance
       const updatedBalance = await tx.creditBalance.update({
