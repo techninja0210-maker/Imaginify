@@ -72,7 +72,15 @@ const BillingPage = async () => {
           <div className="p-16-regular">Current plan: <span className="text-purple-500">{currentPlan ?? (customerId ? "No active subscription" : "Not linked yet")}</span></div>
           <div className="p-16-regular">Renews on: <span className="text-purple-500">{renewsOn ?? "—"}</span></div>
           <div className="p-16-regular">Credits: <span className="text-purple-500">{user?.organizationMembers?.[0]?.organization?.credits?.balance || 0}</span></div>
-          <div className="p-16-regular">Auto top-up: <span className="text-purple-500">{autoTopUpInfo?.autoTopUpEnabled ? `Enabled (${autoTopUpInfo?.autoTopUpAmountCredits ?? 0} credits at threshold ${autoTopUpInfo?.lowBalanceThreshold ?? 0})` : 'Disabled'}</span></div>
+          {(() => {
+            const info: any = autoTopUpInfo;
+            const enabled = !!info?.autoTopUpEnabled;
+            const amount = info?.autoTopUpAmountCredits ?? 0;
+            const threshold = info?.lowBalanceThreshold ?? 0;
+            return (
+              <div className="p-16-regular">Auto top-up: <span className="text-purple-500">{enabled ? `Enabled (${amount} credits at threshold ${threshold})` : 'Disabled'}</span></div>
+            );
+          })()}
         </div>
 
         {/* Direct link to Stripe Billing Portal (provided URL) */}
