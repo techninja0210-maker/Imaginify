@@ -11,7 +11,13 @@ import Stripe from "stripe";
 async function getStripeCustomerIdForUser(userId: string): Promise<string | null> {
   const user = await getUserById(userId);
   const orgId = user?.organizationMembers?.[0]?.organization?.id as string | undefined;
-  const autoTopUpInfo: any = orgId ? await prisma.creditBalance.findUnique({ where: { organizationId: orgId } }) : null;
+  // Use a narrowed type that includes optional auto-top-up fields to satisfy build types
+  type AutoInfo = {
+    autoTopUpEnabled?: boolean;
+    autoTopUpAmountCredits?: number | null;
+    lowBalanceThreshold?: number;
+  } | null;
+  const autoTopUpInfo = (orgId ? await prisma.creditBalance.findUnique({ where: { organizationId: orgId } }) : null) as AutoInfo;
   const auto = autoTopUpInfo as any;
   return user?.stripeCustomerId ?? null;
 }
