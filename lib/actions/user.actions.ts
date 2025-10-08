@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { prisma } from "../database/prisma";
 import { handleError } from "../utils";
+import { isDbDown } from "@/lib/errors";
 
 // CREATE
 export async function createUser(user: CreateUserParams) {
@@ -94,6 +95,9 @@ export async function getUserById(userId: string) {
 
     return JSON.parse(JSON.stringify(user));
   } catch (error) {
+    if (isDbDown(error)) {
+      return null as any;
+    }
     handleError(error);
   }
 }

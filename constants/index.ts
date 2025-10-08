@@ -35,6 +35,11 @@ export const navLinks = [
     icon: "/assets/icons/profile.svg",
   },
   {
+    label: "Admin",
+    route: "/admin",
+    icon: "/assets/icons/profile.svg",
+  },
+  {
     label: "Buy Credits",
     route: "/credits",
     icon: "/assets/icons/bag.svg",
@@ -46,7 +51,7 @@ export const navLinks = [
   },
   {
     label: "Billing",
-    route: "https://billing.stripe.com/p/login/test_6oUaEX1FCbFC5AG8sY5Vu00",
+    route: "/billing",
     icon: "/assets/icons/credit-coins.svg",
   },
 ];

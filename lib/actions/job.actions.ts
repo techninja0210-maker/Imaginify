@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "../database/prisma";
 import { handleError } from "../utils";
+import { isDbDown } from "@/lib/errors";
 
 // ADD JOB
 export async function addJob({ job, userId, organizationId, path }: AddJobParams) {
@@ -166,6 +167,9 @@ export async function getAllJobs({
       savedJobs,
     };
   } catch (error) {
+    if (isDbDown(error)) {
+      return { data: [], totalPage: 1, savedJobs: 0, dbDown: true } as any;
+    }
     handleError(error);
   }
 }
