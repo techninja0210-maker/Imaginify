@@ -92,86 +92,94 @@ const Home = async ({ searchParams }: SearchParamProps) => {
             <h1 className="home-heading text-white">Welcome to Your Video Studio</h1>
             <p className="p-16-regular mt-2 opacity-90">Start a workflow directly from here.</p>
 
-            {/* Credits and subscription info */}
-            <div className="absolute right-6 top-6 space-y-2">
-              {/* Credits pill */}
-              <div className="rounded-full bg-white/90 px-4 py-2 text-dark-600 shadow-sm backdrop-blur-md">
-                <span className="p-14-medium">Credits:</span>
-                <span className="p-16-medium ml-2">{typeof credits === 'number' ? credits : '—'}</span>
-              </div>
-              
-              {/* Plan info */}
-              <div className="rounded-full bg-white/90 px-4 py-2 text-dark-600 shadow-sm backdrop-blur-md">
-                <span className="p-14-medium">Plan:</span>
-                <span className="p-16-medium ml-2">{currentPlan}</span>
-              </div>
-              
-              {/* Renewal date */}
-              <div className="rounded-full bg-white/90 px-4 py-2 text-dark-600 shadow-sm backdrop-blur-md">
-                <span className="p-14-medium">Renews:</span>
-                <span className="p-16-medium ml-2">{renewsOn || "N/A"}</span>
-              </div>
-              
-              {/* Auto top-up status */}
-              {(() => {
-                const info: any = autoTopUpInfo;
-                const enabled = !!info?.autoTopUpEnabled;
-                const amount = info?.autoTopUpAmountCredits ?? 0;
-                const threshold = info?.lowBalanceThreshold ?? 0;
-                return (
-                  <div className="rounded-full bg-white/90 px-4 py-2 text-dark-600 shadow-sm backdrop-blur-md">
-                    <span className="p-14-medium">Auto top-up:</span>
-                    <span className="p-16-medium ml-2">
-                      {enabled ? `${amount} at ${threshold}` : "Disabled"}
-                    </span>
+            {/* Account Information Panel - Embedded in Banner */}
+            <div className="absolute right-6 top-6">
+              <div className="bg-gray-800/90 backdrop-blur-md rounded-xl p-4 border-2 border-white/30 shadow-xl w-64">
+                <div className="space-y-3">
+                  {/* Credits */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">💰</span>
+                    </div>
+                    <span className="text-white font-semibold">Credits: {typeof credits === 'number' ? credits : '—'}</span>
                   </div>
-                );
-              })()}
+                  
+                  {/* Plan */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">🏆</span>
+                    </div>
+                    <div className="bg-green-500 rounded-full px-3 py-1">
+                      <span className="text-white text-sm font-semibold">Plan: {currentPlan}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Renews */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">📅</span>
+                    </div>
+                    <span className="text-white font-semibold">Renews: {renewsOn || "N/A"}</span>
+                  </div>
+                  
+                  {/* Auto top-up */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">🔒</span>
+                    </div>
+                    <div className="bg-orange-500 rounded-full px-3 py-1">
+                      <span className="text-white text-sm font-semibold">Auto top-up: Disabled</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Primary CTA buttons inside hero */}
-            <div className="mt-8 grid gap-4 sm:grid-cols-4">
-              <Link href="/transformations/add/restore" className="rounded-xl bg-white/95 p-5 text-dark-700 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3">
-                <Image src="/assets/icons/image.svg" alt="restore" width={24} height={24} />
-                <span className="p-16-medium">Image Restore</span>
+            {/* Workflow Options - Compact Icons Above Text */}
+            <div className="mt-8 flex justify-center gap-8">
+              <Link href="/transformations/add/restore" className="flex flex-col items-center gap-2 text-white hover:opacity-80 transition-opacity">
+                <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                  <Image src="/assets/icons/image.svg" alt="restore" width={24} height={24} className="filter brightness-0 invert" />
+                </div>
+                <span className="text-sm font-medium">Image Restore</span>
               </Link>
-              <Link href="/transformations/add/fill" className="rounded-xl bg-white/95 p-5 text-dark-700 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3">
-                <Image src="/assets/icons/stars.svg" alt="fill" width={24} height={24} />
-                <span className="p-16-medium">Generative Fill</span>
+              
+              <Link href="/transformations/add/fill" className="flex flex-col items-center gap-2 text-white hover:opacity-80 transition-opacity">
+                <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                  <Image src="/assets/icons/stars.svg" alt="fill" width={24} height={24} className="filter brightness-0 invert" />
+                </div>
+                <span className="text-sm font-medium">Generative Fill</span>
               </Link>
-              <Link href="/transformations/add/remove" className="rounded-xl bg-white/95 p-5 text-dark-700 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3">
-                <Image src="/assets/icons/scan.svg" alt="remove" width={24} height={24} />
-                <span className="p-16-medium">Object Remove</span>
+              
+              <Link href="/transformations/add/remove" className="flex flex-col items-center gap-2 text-white hover:opacity-80 transition-opacity">
+                <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                  <Image src="/assets/icons/scan.svg" alt="remove" width={24} height={24} className="filter brightness-0 invert" />
+                </div>
+                <span className="text-sm font-medium">Object Remove</span>
               </Link>
-              <Link href="/transformations/add/recolor" className="rounded-xl bg-white/95 p-5 text-dark-700 shadow-sm hover:shadow-md transition-shadow flex items-center gap-3">
-                <Image src="/assets/icons/filter.svg" alt="recolor" width={24} height={24} />
-                <span className="p-16-medium">Object Recolor</span>
+              
+              <Link href="/transformations/add/recolor" className="flex flex-col items-center gap-2 text-white hover:opacity-80 transition-opacity">
+                <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+                  <Image src="/assets/icons/filter.svg" alt="recolor" width={24} height={24} className="filter brightness-0 invert" />
+                </div>
+                <span className="text-sm font-medium">Object Recolor</span>
               </Link>
             </div>
 
-            {/* Secondary actions */}
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <Link href="/billing" className="rounded-xl bg-white/20 p-5 text-white shadow-sm hover:bg-white/25 transition-colors text-center">
-                Manage Subscription
-              </Link>
-              <Link href="/credits" className="rounded-xl bg-white/20 p-5 text-white shadow-sm hover:bg-white/25 transition-colors text-center">
-                Buy Top-up
-              </Link>
-            </div>
           </div>
         </section>
       ) : (
         // Marketing view for visitors
-        <section className="home">
-          <h1 className="home-heading">
-            Unleash Your Creative Vision with Imaginify
-          </h1>
-          <div className="mt-6 flex justify-center">
-            <Link href="/pricing" className="button bg-purple-gradient bg-cover rounded-full px-6 py-3 text-white">
-              See Pricing
-            </Link>
-          </div>
-        </section>
+      <section className="home">
+        <h1 className="home-heading">
+          Unleash Your Creative Vision with Imaginify
+        </h1>
+        <div className="mt-6 flex justify-center">
+          <Link href="/pricing" className="button bg-purple-gradient bg-cover rounded-full px-6 py-3 text-white">
+            See Pricing
+          </Link>
+        </div>
+      </section>
       )}
 
       <section className="mt-6">
