@@ -102,6 +102,33 @@ export async function POST(request: Request) {
     return new Response("", { status: 200 });
   }
 
+  // Handle subscription creation/updates
+  if (eventType === "customer.subscription.created" || eventType === "customer.subscription.updated") {
+    const subscription = event.data.object as any;
+    const customerId = subscription.customer as string;
+    
+    try {
+      // Find user by Stripe customer ID
+      const user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } });
+      if (user) {
+        console.log(`Subscription ${eventType} for user ${user.clerkId}, customer ${customerId}`);
+        
+        // Update user with subscription info (you can add subscription fields to User model if needed)
+        await prisma.user.update({
+          where: { clerkId: user.clerkId },
+          data: { 
+            // Add any subscription-related fields here if you extend the User model
+            // For now, we just log the event
+          }
+        });
+      }
+    } catch (error) {
+      console.error(`Error handling subscription ${eventType}:`, error);
+    }
+    
+    return NextResponse.json({ ok: true });
+  }
+
   // Subscription renewal/start via invoice.paid
   if (eventType === "invoice.paid") {
     const invoice = event.data.object as any;

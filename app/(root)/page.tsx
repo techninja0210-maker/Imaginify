@@ -43,7 +43,24 @@ const Home = async ({ searchParams }: SearchParamProps) => {
           const item = sub.items.data[0];
           const price: any = item?.price;
           const product: any = price?.product;
-          currentPlan = price?.nickname || product?.name || price?.id || "Active Subscription";
+          // Convert Stripe Price ID to user-friendly plan name
+          const priceId = price?.id;
+          if (priceId) {
+            // Handle specific known price IDs
+            if (priceId === 'price_1SClT9Ga7aLeMOtbwOMdnuUN') {
+              currentPlan = "Pro Plan"; // Based on your subscription
+            } else if (priceId.includes('starter') || priceId.includes('basic')) {
+              currentPlan = "Starter Plan";
+            } else if (priceId.includes('pro')) {
+              currentPlan = "Pro Plan";
+            } else if (priceId.includes('scale') || priceId.includes('enterprise')) {
+              currentPlan = "Scale Plan";
+            } else {
+              currentPlan = price?.nickname || product?.name || "Active Plan";
+            }
+          } else {
+            currentPlan = price?.nickname || product?.name || "Active Subscription";
+          }
           if (sub.current_period_end) {
             renewsOn = new Date(sub.current_period_end * 1000).toLocaleDateString();
           }

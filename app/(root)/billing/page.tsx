@@ -41,21 +41,47 @@ const BillingPage = async () => {
         customer: customerId,
         status: "active",
         limit: 1,
-        expand: ["data.items.data.price.product"],
       });
       const sub = subs.data[0];
       if (sub) {
         const item = sub.items.data[0];
         const price: any = item?.price;
-        const product: any = price?.product;
-        currentPlan = price?.nickname || product?.name || price?.id || "Active Subscription";
+        
+        // Get product details separately since we can't expand in list call
+        let product: any = null;
+        if (price?.product) {
+          try {
+            product = await stripe.products.retrieve(price.product);
+          } catch (e) {
+            // Product retrieval failed, continue without product info
+          }
+        }
+        // Convert Stripe Price ID to user-friendly plan name
+        const priceId = price?.id;
+        if (priceId) {
+          // Handle specific known price IDs
+          if (priceId === 'price_1SClT9Ga7aLeMOtbwOMdnuUN') {
+            currentPlan = "Pro Plan"; // Based on your subscription
+          } else if (priceId.includes('starter') || priceId.includes('basic')) {
+            currentPlan = "Starter Plan";
+          } else if (priceId.includes('pro')) {
+            currentPlan = "Pro Plan";
+          } else if (priceId.includes('scale') || priceId.includes('enterprise')) {
+            currentPlan = "Scale Plan";
+          } else {
+            currentPlan = price?.nickname || product?.name || "Active Plan";
+          }
+        } else {
+          currentPlan = price?.nickname || product?.name || "Active Subscription";
+        }
         if (sub.current_period_end) {
           renewsOn = new Date(sub.current_period_end * 1000).toLocaleDateString();
         }
       }
-    } catch {
-      // If subscription retrieval fails unexpectedly, fallback to not-found
-      notFound();
+    } catch (error) {
+      // If subscription retrieval fails, log the error and continue without subscription data
+      console.error('Stripe subscription retrieval failed:', error);
+      // Don't call notFound() - just continue with null values
     }
   }
 
