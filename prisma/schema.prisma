@@ -17,6 +17,14 @@ model User {
   lastName            String?
   stripeCustomerId    String?
   planId              Int                  @default(1)
+  // User roles and permissions
+  role                UserRole             @default(USER)
+  isActive            Boolean              @default(true)
+  // User-scoped credits (for personal accounts)
+  creditBalance       Int                  @default(10)
+  lowBalanceThreshold Int                  @default(5)
+  autoTopUpEnabled    Boolean              @default(false)
+  autoTopUpAmountCredits Int?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   ledger              CreditLedger[]
@@ -26,6 +34,12 @@ model User {
   transactions        Transaction[]
 
   @@map("users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
 }
 
 model Organization {

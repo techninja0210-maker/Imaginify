@@ -97,7 +97,7 @@ const BillingPage = async () => {
         <div className="grid gap-3">
           <div className="p-16-regular">Current plan: <span className="text-purple-500">{currentPlan ?? (customerId ? "No active subscription" : "Not linked yet")}</span></div>
           <div className="p-16-regular">Renews on: <span className="text-purple-500">{renewsOn ?? "—"}</span></div>
-          <div className="p-16-regular">Credits: <span className="text-purple-500">{user?.organizationMembers?.[0]?.organization?.credits?.balance || 0}</span></div>
+          <div className="p-16-regular">Credits: <span className="text-purple-500">{user?.creditBalance || 0}</span></div>
           {(() => {
             const info: any = autoTopUpInfo;
             const enabled = !!info?.autoTopUpEnabled;
@@ -109,24 +109,49 @@ const BillingPage = async () => {
           })()}
         </div>
 
-        {/* Direct link to Stripe Billing Portal (provided URL) */}
-        <a href="https://billing.stripe.com/p/login/test_6oUaEX1FCbFC5AG8sY5Vu00" target="_blank" rel="noopener noreferrer" className="w-full">
-          <Button type="button" className="w-full rounded-full bg-purple-gradient bg-cover">Manage Subscription in Stripe</Button>
-        </a>
+        {/* Billing Actions */}
+        <div className="space-y-4">
+          {/* Buy More Credits */}
+          <a href="/credits" className="w-full">
+            <Button type="button" className="w-full rounded-full bg-green-600 hover:bg-green-700">
+              💳 Buy More Credits
+            </Button>
+          </a>
 
-        <form action={async () => {
-          "use server";
-          if (!customerId) return;
-          await openCustomerPortalWithReturnUrl(customerId, "https://www.shoppablevideos.com/");
-        }}>
-          <Button
-            type="submit"
-            className="w-full rounded-full bg-purple-gradient bg-cover"
-            disabled={!customerId}
+          {/* Stripe Customer Portal */}
+          {customerId ? (
+            <form action={async () => {
+              "use server";
+              await openCustomerPortalWithReturnUrl(customerId, "https://www.shoppablevideos.com/");
+            }}>
+              <Button
+                type="submit"
+                className="w-full rounded-full bg-purple-gradient bg-cover"
+              >
+                🔧 Manage Subscription (Cancel/Upgrade)
+              </Button>
+            </form>
+          ) : (
+            <div className="text-center p-4 bg-gray-100 rounded-lg">
+              <p className="text-gray-600">No active subscription</p>
+              <a href="/credits" className="text-purple-600 hover:underline">
+                Buy credits to get started
+              </a>
+            </div>
+          )}
+
+          {/* Direct Stripe Portal Link (for testing) */}
+          <a 
+            href="https://billing.stripe.com/p/login/test_6oUaEX1FCbFC5AG8sY5Vu00" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="w-full"
           >
-            {customerId ? "Open Customer Portal (return to site)" : "Customer Portal (coming soon)"}
-          </Button>
-        </form>
+            <Button type="button" className="w-full rounded-full bg-gray-600 hover:bg-gray-700">
+              🔗 Direct Stripe Portal (Test)
+            </Button>
+          </a>
+        </div>
       </section>
     </>
   );

@@ -54,12 +54,9 @@ export async function POST(request: Request) {
 
     const newTransaction = await createTransaction(transaction);
 
-    // Grant purchased credits to the user's organization using idempotency
+    // Grant purchased credits to the user using idempotency
     if (transaction.buyerId && typeof transaction.buyerId === 'string' && transaction.credits) {
-      const organizationId = await getUserOrganizationId(transaction.buyerId);
-      if (organizationId) {
-        await updateCredits(organizationId, transaction.credits, `Top-up purchase ${transaction.stripeId}` , `stripe:${transaction.stripeId}`);
-      }
+      await updateCredits(transaction.buyerId, transaction.credits, `Top-up purchase ${transaction.stripeId}` , `stripe:${transaction.stripeId}`);
     }
     
     return NextResponse.json({ message: "OK", transaction: newTransaction });
@@ -154,10 +151,7 @@ export async function POST(request: Request) {
     }
 
     if (clerkUserId && typeof clerkUserId === 'string' && planCredits > 0) {
-      const organizationId = await getUserOrganizationId(clerkUserId);
-      if (organizationId) {
-        await updateCredits(organizationId, planCredits, `Subscription credit grant ${subscriptionId}`, `stripe:invoice:${invoice.id}`);
-      }
+      await updateCredits(clerkUserId, planCredits, `Subscription credit grant ${subscriptionId}`, `stripe:invoice:${invoice.id}`);
     }
 
     return NextResponse.json({ ok: true });

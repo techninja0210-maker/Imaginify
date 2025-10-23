@@ -21,7 +21,7 @@ const Home = async ({ searchParams }: SearchParamProps) => {
   
   // Get user data if logged in
   const user = userId ? await getUserById(userId) : null;
-  const credits = user?.organizationMembers?.[0]?.organization?.credits?.balance || 0;
+  const credits = user?.creditBalance || 0;
 
   // Get subscription and billing info
   let currentPlan = "Free";

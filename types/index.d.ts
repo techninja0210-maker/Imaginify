@@ -8,6 +8,8 @@ declare type CreateUserParams = {
   firstName: string;
   lastName: string;
   photo: string;
+  role?: 'USER' | 'ADMIN' | 'SUPER_ADMIN';
+  isActive?: boolean;
 };
 
 declare type UpdateUserParams = {

@@ -148,14 +148,30 @@ export async function deleteUser(clerkId: string) {
   }
 }
 
-// USE CREDITS (Updated for new ledger system)
-export async function updateCredits(organizationId: string, creditFee: number, reason: string = "Credit usage", idempotencyKey?: string) {
+// USE CREDITS (User-scoped version)
+export async function updateCredits(userId: string, creditFee: number, reason: string = "Credit usage", idempotencyKey?: string) {
   try {
     // Use transaction to ensure atomicity
     const result = await prisma.$transaction(async (tx) => {
-      // Create ledger entry
+      // Create ledger entry (still using organizationId for compatibility)
+      const user = await tx.user.findUnique({
+        where: { clerkId: userId },
+        include: {
+          organizationMembers: {
+            include: { organization: true }
+          }
+        }
+      });
+
+      if (!user || !user.organizationMembers.length) {
+        throw new Error("User organization not found");
+      }
+
+      const organizationId = user.organizationMembers[0].organization.id;
+
       const ledgerData: any = {
         organizationId,
+        userId: user.id,
         type: creditFee > 0 ? 'allocation' : 'deduction',
         amount: creditFee,
         reason,
@@ -163,13 +179,74 @@ export async function updateCredits(organizationId: string, creditFee: number, r
       if (idempotencyKey) ledgerData.idempotencyKey = idempotencyKey;
       await tx.creditLedger.create({ data: ledgerData });
 
-      // Update balance
-      const updatedBalance = await tx.creditBalance.update({
-        where: { organizationId },
-        data: { balance: { increment: creditFee } }
+      // Update user's personal credit balance
+      const updatedUser = await tx.user.update({
+        where: { clerkId: userId },
+        data: { creditBalance: { increment: creditFee } }
       });
 
-      return updatedBalance;
+      return updatedUser;
+    });
+
+    return JSON.parse(JSON.stringify(result));
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+// DEDUCT CREDITS (User-scoped version)
+export async function deductCredits(userId: string, amount: number, reason: string = "Video generation", idempotencyKey?: string) {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Get user with current balance
+      const user = await tx.user.findUnique({
+        where: { clerkId: userId },
+        include: {
+          organizationMembers: {
+            include: { organization: true }
+          }
+        }
+      });
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      // Check sufficient credits
+      if (user.creditBalance < amount) {
+        throw new Error(`Insufficient credits. Current: ${user.creditBalance}, Required: ${amount}`);
+      }
+
+      // Check for duplicate idempotency key
+      if (idempotencyKey) {
+        const existingLedger = await tx.creditLedger.findUnique({
+          where: { idempotencyKey }
+        });
+        
+        if (existingLedger) {
+          return { success: false, message: "Transaction already processed", ledgerId: existingLedger.id };
+        }
+      }
+
+      // Create ledger entry
+      const organizationId = user.organizationMembers[0]?.organization?.id;
+      const ledgerData: any = {
+        organizationId,
+        userId: user.id,
+        type: 'deduction',
+        amount: -amount,
+        reason,
+      };
+      if (idempotencyKey) ledgerData.idempotencyKey = idempotencyKey;
+      const ledgerEntry = await tx.creditLedger.create({ data: ledgerData });
+
+      // Update user's credit balance
+      const updatedUser = await tx.user.update({
+        where: { clerkId: userId },
+        data: { creditBalance: { decrement: amount } }
+      });
+
+      return { success: true, updatedUser, ledgerEntry };
     });
 
     return JSON.parse(JSON.stringify(result));
