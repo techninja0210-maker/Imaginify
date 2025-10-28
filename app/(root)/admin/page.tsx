@@ -91,7 +91,7 @@ const AdminPage = async ({ searchParams }: { searchParams: { q?: string } }) => 
                       if (!newRole || newRole === u.role) return;
                       await prisma.user.update({
                         where: { id: u.id },
-                        data: { role: newRole }
+                        data: { role: newRole as any }
                       });
                     }} className="flex gap-2">
                       <select className="input-field" name="role" defaultValue={u.role}>
