@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/database/prisma';
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/me/ledger
  * Get current user's credit ledger (transaction history)

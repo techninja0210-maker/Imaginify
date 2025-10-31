@@ -4,6 +4,8 @@ import { prisma } from '@/lib/database/prisma';
 import { updateCredits } from '@/lib/actions/user.actions';
 import { createTransaction } from '@/lib/actions/transaction.action';
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);

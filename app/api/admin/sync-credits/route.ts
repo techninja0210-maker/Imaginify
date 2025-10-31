@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/database/prisma';
 
+export const dynamic = "force-dynamic";
+
 /**
  * Sync user credit balance to match organization balance
  * POST /api/admin/sync-credits?email=techninja0210@gmail.com

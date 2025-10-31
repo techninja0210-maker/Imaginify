@@ -3,6 +3,8 @@ import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/database/prisma';
 import { deductCredits } from '@/lib/actions/user.actions';
 
+export const dynamic = "force-dynamic";
+
 /**
  * POST /api/jobs
  * Create a job from a quote (locks quote + deducts credits atomically)

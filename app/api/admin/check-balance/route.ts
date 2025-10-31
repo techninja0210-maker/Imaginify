@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/database/prisma';
 
+export const dynamic = "force-dynamic";
+
 /**
  * Admin endpoint to check user credit balance by email
  * GET /api/admin/check-balance?email=techninja0210@gmail.com
