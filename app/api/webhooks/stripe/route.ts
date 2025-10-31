@@ -36,15 +36,16 @@ export async function POST(request: Request) {
       amount: amount_total ? amount_total / 100 : 0,
       plan: metadata?.plan || "",
       credits: Number(metadata?.credits) || 0,
-      buyerId: metadata?.buyerId || "",
+      buyerId: metadata?.clerkUserId || metadata?.buyerId || "",
       createdAt: new Date(),
     };
 
     // Persist Stripe customer ID on the user for future billing portal access
     try {
-      if (metadata?.clerkUserId && customerId) {
+      const clerkUserId = metadata?.clerkUserId || metadata?.buyerId;
+      if (clerkUserId && customerId) {
         await prisma.user.update({
-          where: { clerkId: metadata.clerkUserId },
+          where: { clerkId: clerkUserId },
           data: { stripeCustomerId: customerId }
         });
       }
@@ -52,11 +53,55 @@ export async function POST(request: Request) {
       // no-op: we still record the transaction
     }
 
-    const newTransaction = await createTransaction(transaction);
+    let newTransaction;
+    try {
+      newTransaction = await createTransaction(transaction);
+    } catch (txError: any) {
+      console.error('Transaction creation failed in webhook:', txError);
+      // Continue to grant credits even if transaction record fails
+    }
 
     // Grant purchased credits to the user using idempotency
-    if (transaction.buyerId && typeof transaction.buyerId === 'string' && transaction.credits) {
-      await updateCredits(transaction.buyerId, transaction.credits, `Top-up purchase ${transaction.stripeId}` , `stripe:${transaction.stripeId}`);
+    // Use same idempotency key format as confirm endpoint: stripe:session:${sessionId}
+    if (transaction.buyerId && typeof transaction.buyerId === 'string' && transaction.credits > 0) {
+      try {
+        const idemKey = `stripe:session:${transaction.stripeId}`;
+        // Check if already processed (prevent double-grant if confirm endpoint already handled it)
+        const existingLedger = await prisma.creditLedger.findUnique({
+          where: { idempotencyKey: idemKey }
+        });
+        
+        if (existingLedger) {
+          console.log(`Credits already granted for session ${transaction.stripeId} (idempotency check)`);
+          return NextResponse.json({ 
+            message: "OK", 
+            transaction: newTransaction,
+            skipped: true,
+            reason: 'Already processed'
+          });
+        }
+
+        const creditResult = await updateCredits(
+          transaction.buyerId, 
+          transaction.credits, 
+          `Top-up purchase ${transaction.stripeId}`, 
+          idemKey
+        );
+        console.log(`Credits granted via webhook: ${transaction.credits} to ${transaction.buyerId}`);
+        return NextResponse.json({ 
+          message: "OK", 
+          transaction: newTransaction,
+          creditsGranted: transaction.credits
+        });
+      } catch (creditError: any) {
+        console.error('Credit grant failed in webhook:', creditError);
+        // Return error but don't fail webhook completely (Stripe will retry)
+        return NextResponse.json({ 
+          message: "Transaction recorded but credit grant failed", 
+          error: creditError?.message,
+          transaction: newTransaction
+        }, { status: 500 });
+      }
     }
     
     return NextResponse.json({ message: "OK", transaction: newTransaction });
@@ -106,7 +151,18 @@ export async function POST(request: Request) {
     
     try {
       // Find user by Stripe customer ID
-      const user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } });
+      let user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } });
+      // Fallback: map by email
+      if (!user) {
+        const customer = await stripe.customers.retrieve(customerId);
+        const email = (customer as any)?.email as string | undefined;
+        if (email) {
+          user = await prisma.user.findFirst({ where: { email } });
+          if (user) {
+            await prisma.user.update({ where: { clerkId: user.clerkId }, data: { stripeCustomerId: customerId } });
+          }
+        }
+      }
       if (user) {
         console.log(`Subscription ${eventType} for user ${user.clerkId}, customer ${customerId}`);
         
@@ -136,7 +192,17 @@ export async function POST(request: Request) {
     // Fallbacks if metadata is missing
     if (!clerkUserId && invoice.customer) {
       const customerId = invoice.customer as string;
-      const user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } });
+      let user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } });
+      if (!user) {
+        const customer = await stripe.customers.retrieve(customerId);
+        const email = (customer as any)?.email as string | undefined;
+        if (email) {
+          user = await prisma.user.findFirst({ where: { email } });
+          if (user) {
+            await prisma.user.update({ where: { clerkId: user.clerkId }, data: { stripeCustomerId: customerId } });
+          }
+        }
+      }
       if (user) clerkUserId = user.clerkId;
     }
     if (!planCredits && invoice.lines?.data?.length) {

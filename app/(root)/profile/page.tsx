@@ -35,7 +35,16 @@ const Profile = async ({ searchParams }: SearchParamProps) => {
               height={50}
               className="size-9 md:size-12"
             />
-            <h2 className="h2-bold text-dark-600">{user.organizationMembers?.[0]?.organization?.credits?.balance || 0}</h2>
+            <div>
+              <h2 className="h2-bold text-dark-600">{user.creditBalance || 0}</h2>
+              <div className="mt-2 text-sm text-gray-500">
+                <p>User Balance: <span className="font-semibold">{user.creditBalance || 0}</span></p>
+                <p>Org Balance: <span className="font-semibold">{user.organizationMembers?.[0]?.organization?.credits?.balance || 'N/A'}</span></p>
+                {user.creditBalance !== (user.organizationMembers?.[0]?.organization?.credits?.balance || 0) && (
+                  <p className="text-yellow-600 text-xs mt-1">⚠️ Out of sync</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

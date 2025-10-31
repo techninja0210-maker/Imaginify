@@ -17,7 +17,7 @@ export async function requireAdmin() {
   }
 
   if (!canAccessAdmin(user.role)) {
-    redirect("/dashboard");
+    redirect("/admin/denied");
   }
 
   return user;
@@ -37,7 +37,7 @@ export async function requireSuperAdmin() {
   }
 
   if (user.role !== 'SUPER_ADMIN') {
-    redirect("/dashboard");
+    redirect("/");
   }
 
   return user;

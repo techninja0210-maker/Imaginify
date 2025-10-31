@@ -1,6 +1,6 @@
 import Header from "@/components/shared/Header";
 import { Button } from "@/components/ui/button";
-import { openCustomerPortal, openCustomerPortalWithReturnUrl } from "@/lib/actions/subscription.actions";
+import { openCustomerPortal, openCustomerPortalWithReturnUrl, ensureStripeCustomerForCurrentUser } from "@/lib/actions/subscription.actions";
 import { prisma } from "@/lib/database/prisma";
 import { getUserById } from "@/lib/actions/user.actions";
 import { auth } from "@clerk/nextjs";
@@ -29,14 +29,30 @@ const BillingPage = async () => {
   // Load user and Stripe customer
   const user = await getUserById(userId);
   if (!user) notFound();
-  const customerId = user.stripeCustomerId ?? null;
+  let customerId = user.stripeCustomerId ?? null;
 
   // Fetch active subscription (if any)
   let currentPlan: string | null = null;
   let renewsOn: string | null = null;
-  if (customerId && process.env.STRIPE_SECRET_KEY) {
+  const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null as any;
+
+  // Fallback: if no saved customerId, try to resolve by email (works even if webhook wasn’t run)
+  if (!customerId && stripe) {
     try {
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+      if (user.email) {
+        // Prefer search API in test mode; fallback to list+filter
+        const search = await (stripe as any).customers.search?.({ query: `email:'${user.email}'` }).catch(() => null);
+        const found = (search?.data?.[0]) || (await stripe.customers.list({ email: user.email, limit: 1 })).data[0];
+        if (found?.id) {
+          customerId = found.id;
+          await prisma.user.update({ where: { clerkId: user.clerkId }, data: { stripeCustomerId: customerId } });
+        }
+      }
+    } catch {}
+  }
+
+  if (customerId && stripe) {
+    try {
       const subs = await stripe.subscriptions.list({
         customer: customerId,
         status: "active",
@@ -97,7 +113,15 @@ const BillingPage = async () => {
         <div className="grid gap-3">
           <div className="p-16-regular">Current plan: <span className="text-purple-500">{currentPlan ?? (customerId ? "No active subscription" : "Not linked yet")}</span></div>
           <div className="p-16-regular">Renews on: <span className="text-purple-500">{renewsOn ?? "—"}</span></div>
-          <div className="p-16-regular">Credits: <span className="text-purple-500">{user?.creditBalance || 0}</span></div>
+          <div className="p-16-regular">
+            <div>Credits (User): <span className="text-purple-500">{user?.creditBalance || 0}</span></div>
+            <div className="text-sm text-gray-600 mt-1">
+              Org Balance: <span className="text-gray-500">{autoTopUpInfo?.balance || 'N/A'}</span>
+              {user?.creditBalance !== (autoTopUpInfo?.balance || 0) && (
+                <span className="text-yellow-600 ml-2">⚠️ Out of sync</span>
+              )}
+            </div>
+          </div>
           {(() => {
             const info: any = autoTopUpInfo;
             const enabled = !!info?.autoTopUpEnabled;
@@ -132,12 +156,15 @@ const BillingPage = async () => {
               </Button>
             </form>
           ) : (
-            <div className="text-center p-4 bg-gray-100 rounded-lg">
-              <p className="text-gray-600">No active subscription</p>
-              <a href="/credits" className="text-purple-600 hover:underline">
-                Buy credits to get started
-              </a>
-            </div>
+            <form action={async () => {
+              "use server";
+              const cid = await ensureStripeCustomerForCurrentUser();
+              await openCustomerPortalWithReturnUrl(cid, `${process.env.NEXT_PUBLIC_SERVER_URL}/billing`);
+            }}>
+              <Button type="submit" className="w-full rounded-full bg-purple-gradient bg-cover">
+                🔗 Link billing and open Portal
+              </Button>
+            </form>
           )}
 
           {/* Direct Stripe Portal Link (for testing) */}

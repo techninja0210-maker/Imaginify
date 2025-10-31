@@ -20,7 +20,7 @@ export async function startSubscriptionCheckout(lineItems: Array<{ priceId: stri
     metadata: {
       clerkUserId: userId,
     },
-    success_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/billing`,
+    success_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/billing?success=1&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/pricing`,
   });
 
@@ -39,6 +39,31 @@ export async function openCustomerPortal(customerId: string) {
   });
 
   redirect(portal.url);
+}
+
+export async function ensureStripeCustomerForCurrentUser() {
+  const { userId } = auth();
+  if (!userId) redirect('/sign-in');
+
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+  // Find existing
+  const userRes = await (await import('@/lib/database/prisma')).prisma.user.findUnique({ where: { clerkId: userId } });
+  if (!userRes) redirect('/sign-in');
+  if (userRes.stripeCustomerId) return userRes.stripeCustomerId;
+
+  const customer = await stripe.customers.create({
+    email: userRes.email,
+    name: `${userRes.firstName || ''} ${userRes.lastName || ''}`.trim() || undefined,
+    metadata: { clerkUserId: userRes.clerkId },
+  });
+
+  await (await import('@/lib/database/prisma')).prisma.user.update({
+    where: { clerkId: userRes.clerkId },
+    data: { stripeCustomerId: customer.id },
+  });
+
+  return customer.id;
 }
 
 

@@ -7,6 +7,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { prisma } from "@/lib/database/prisma"
 import Stripe from "stripe"
+import dynamic from "next/dynamic"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2023-10-16",
@@ -101,7 +102,17 @@ const Home = async ({ searchParams }: SearchParamProps) => {
                     <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center">
                       <span className="text-white text-xs font-bold">💰</span>
                     </div>
-                    <span className="text-white font-semibold">Credits: {typeof credits === 'number' ? credits : '—'}</span>
+                    <div className="flex flex-col">
+                      <span className="text-white font-semibold">Credits: {typeof credits === 'number' ? credits : '—'}</span>
+                      {user?.organizationMembers?.[0]?.organization?.credits && (
+                        <span className="text-white/70 text-xs">
+                          Org: {user.organizationMembers[0].organization.credits.balance || 'N/A'}
+                          {credits !== (user.organizationMembers[0].organization.credits.balance || 0) && (
+                            <span className="text-yellow-300 ml-1">⚠️</span>
+                          )}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   {/* Plan */}
@@ -165,6 +176,12 @@ const Home = async ({ searchParams }: SearchParamProps) => {
                 <span className="text-sm font-medium">Object Recolor</span>
               </Link>
             </div>
+
+            {/* Quote tester */}
+            {(() => {
+              const QuoteTester = dynamic(() => import("@/components/shared/QuoteTester"), { ssr: false });
+              return <QuoteTester />
+            })()}
 
           </div>
         </section>

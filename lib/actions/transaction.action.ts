@@ -28,9 +28,10 @@ export async function checkoutCredits(transaction: CheckoutTransactionParams) {
       plan: transaction.plan,
       credits: transaction.credits,
       buyerId: transaction.buyerId,
+      clerkUserId: transaction.buyerId,
     },
     mode: 'payment',
-    success_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/profile`,
+    success_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/?success=1&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/`,
   })
 
@@ -39,13 +40,20 @@ export async function checkoutCredits(transaction: CheckoutTransactionParams) {
 
 export async function createTransaction(transaction: CreateTransactionParams) {
   try {
-    // Get user's organization ID
-    const organizationId = await getUserOrganizationId(transaction.buyerId);
-    
-    // Create transaction
+    // Resolve internal user ID from Clerk ID
+    const user = await prisma.user.findUnique({
+      where: { clerkId: transaction.buyerId },
+      select: { id: true }
+    });
+
+    if (!user) {
+      throw new Error(`User not found for clerkId: ${transaction.buyerId}`);
+    }
+
+    // Create transaction with internal user ID
     const newTransaction = await prisma.transaction.create({
       data: {
-        userId: transaction.buyerId,
+        userId: user.id,
         stripeId: transaction.stripeId,
         amount: transaction.amount,
         plan: transaction.plan,
@@ -53,11 +61,6 @@ export async function createTransaction(transaction: CreateTransactionParams) {
         status: 'completed'
       }
     });
-
-    // Update credits using the new ledger system
-    if (organizationId && transaction.credits) {
-      await updateCredits(organizationId, transaction.credits, `Purchase: ${transaction.plan}`);
-    }
 
     return JSON.parse(JSON.stringify(newTransaction));
   } catch (error) {

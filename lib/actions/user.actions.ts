@@ -151,7 +151,26 @@ export async function deleteUser(clerkId: string) {
 // USE CREDITS (User-scoped version)
 export async function updateCredits(userId: string, creditFee: number, reason: string = "Credit usage", idempotencyKey?: string) {
   try {
-    // Use transaction to ensure atomicity
+    // Quick database health check before transaction
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch (dbCheckError: any) {
+      const dbErrorMsg = dbCheckError?.message || '';
+      if (
+        dbErrorMsg.includes('P1001') ||
+        dbErrorMsg.includes("Can't reach database server") ||
+        dbErrorMsg.includes('Transaction API error') ||
+        dbErrorMsg.includes('Unable to start a transaction')
+      ) {
+        throw new Error(
+          'Database connection failed. Your Neon database may be paused. ' +
+          'Please resume it in the Neon dashboard and try again.'
+        );
+      }
+      // If it's a different error, continue and let the transaction handle it
+    }
+
+    // Use transaction to ensure atomicity with timeout
     const result = await prisma.$transaction(async (tx) => {
       // Create ledger entry (still using organizationId for compatibility)
       const user = await tx.user.findUnique({
@@ -185,12 +204,73 @@ export async function updateCredits(userId: string, creditFee: number, reason: s
         data: { creditBalance: { increment: creditFee } }
       });
 
+      // Verify the update actually happened
+      const verifyUser = await tx.user.findUnique({
+        where: { clerkId: userId },
+        select: { creditBalance: true }
+      });
+
+      if (!verifyUser || verifyUser.creditBalance !== (user.creditBalance + creditFee)) {
+        throw new Error(`Credit balance update verification failed. Expected: ${user.creditBalance + creditFee}, Got: ${verifyUser?.creditBalance || 'null'}`);
+      }
+
+      // Mirror to organization credit_balances for backwards-compat dashboards
+      if (organizationId) {
+        try {
+          const existing = await tx.creditBalance.findUnique({ where: { organizationId } });
+          if (existing) {
+            await tx.creditBalance.update({ 
+              where: { organizationId }, 
+              data: { balance: { increment: creditFee } } 
+            });
+            console.log(`[UPDATE_CREDITS] Updated org balance: orgId=${organizationId}, increment=${creditFee}, newBalance=${existing.balance + creditFee}`);
+          } else {
+            // Create org balance entry matching user's current balance
+            await tx.creditBalance.create({ 
+              data: { 
+                organizationId, 
+                balance: updatedUser.creditBalance, // Use the already-updated user balance
+                lowBalanceThreshold: user.lowBalanceThreshold || 10,
+                autoTopUpEnabled: false
+              } 
+            });
+            console.log(`[UPDATE_CREDITS] Created org balance: orgId=${organizationId}, balance=${updatedUser.creditBalance}`);
+          }
+        } catch (orgError: any) {
+          console.error(`[UPDATE_CREDITS] Failed to mirror to org balance:`, orgError);
+          // Don't fail the whole transaction if org mirror fails - user balance is primary
+          // But log it so we can debug
+        }
+      }
+
+      console.log(`[UPDATE_CREDITS] Successfully updated credits: userId=${userId}, increment=${creditFee}, oldBalance=${user.creditBalance}, newBalance=${updatedUser.creditBalance}`);
       return updatedUser;
+    }, {
+      maxWait: 10000, // Maximum time to wait for a transaction slot (10 seconds)
+      timeout: 20000, // Maximum time for the transaction to complete (20 seconds)
     });
 
     return JSON.parse(JSON.stringify(result));
-  } catch (error) {
-    handleError(error);
+  } catch (error: any) {
+    console.error('updateCredits error:', error);
+    
+    // Check for database connection errors
+    const errorMessage = error?.message || '';
+    if (
+      errorMessage.includes('Transaction API error') ||
+      errorMessage.includes('Unable to start a transaction') ||
+      errorMessage.includes('P1001') ||
+      errorMessage.includes("Can't reach database server") ||
+      errorMessage.includes('timeout')
+    ) {
+      throw new Error(
+        'Database connection timeout. The database may be paused. ' +
+        'Please try again in a few seconds, or check if the Neon database needs to be resumed.'
+      );
+    }
+    
+    // Re-throw with original message
+    throw new Error(`Failed to update credits: ${errorMessage || 'Unknown error'}`);
   }
 }
 
@@ -245,6 +325,14 @@ export async function deductCredits(userId: string, amount: number, reason: stri
         where: { clerkId: userId },
         data: { creditBalance: { decrement: amount } }
       });
+
+      // Mirror decrement to organization credit_balances
+      if (organizationId) {
+        const existing = await tx.creditBalance.findUnique({ where: { organizationId } });
+        if (existing) {
+          await tx.creditBalance.update({ where: { organizationId }, data: { balance: { decrement: amount } } });
+        }
+      }
 
       return { success: true, updatedUser, ledgerEntry };
     });

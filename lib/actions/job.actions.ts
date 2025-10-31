@@ -291,16 +291,27 @@ export async function createJobQuote({
   }
 }
 
-// CONFIRM JOB QUOTE
+// CONFIRM JOB QUOTE (DEPRECATED - Use POST /api/jobs instead)
+// Kept for backward compatibility but uses user-scoped credits now
 export async function confirmJobQuote(quoteId: string, userId: string) {
   try {
+    // Get user to resolve clerkId
+    const user = await prisma.user.findUnique({
+      where: { clerkId: userId },
+      select: { id: true }
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       // Get the quote
       const quote = await tx.jobQuote.findUnique({
         where: { id: quoteId }
       });
 
-      if (!quote || quote.userId !== userId) {
+      if (!quote || quote.userId !== user.id) {
         throw new Error("Quote not found or unauthorized");
       }
 
@@ -312,13 +323,14 @@ export async function confirmJobQuote(quoteId: string, userId: string) {
         throw new Error("Quote has expired");
       }
 
-      // Check if user has enough credits
-      const balance = await tx.creditBalance.findUnique({
-        where: { organizationId: quote.organizationId }
+      // Get user with current balance (user-scoped)
+      const userWithBalance = await tx.user.findUnique({
+        where: { id: user.id },
+        select: { creditBalance: true }
       });
 
-      if (!balance || balance.balance < quote.totalCredits) {
-        throw new Error("Insufficient credits");
+      if (!userWithBalance || userWithBalance.creditBalance < quote.totalCredits) {
+        throw new Error(`Insufficient credits. Required: ${quote.totalCredits}, Available: ${userWithBalance?.creditBalance || 0}`);
       }
 
       // Create job
@@ -329,28 +341,45 @@ export async function confirmJobQuote(quoteId: string, userId: string) {
           title: `Job - ${quote.workflowType}`,
           description: `Generated from quote ${quoteId}`,
           quotedCredits: quote.totalCredits,
-          quotedAt: new Date(),
+          quotedAt: quote.createdAt,
           confirmedAt: new Date(),
           status: 'confirmed',
+          totalRetailCostCredits: quote.totalCredits,
+          totalInternalCostUsd: (quote.breakdown as any)?.internalUsd || null,
           metadata: quote.parameters as any
         }
       });
 
-      // Deduct credits
-      await tx.creditLedger.create({
-        data: {
-          organizationId: quote.organizationId,
-          userId: quote.userId,
-          type: 'deduction',
-          amount: -quote.totalCredits,
-          reason: `Job creation: ${job.id}`
-        }
+      // Deduct credits using user-scoped function (handles ledger + org mirror)
+      // Note: This is called inside a transaction, so we need to import deductCredits
+      // but it creates its own transaction. For now, we'll do it manually here.
+      const ledgerData: any = {
+        organizationId: quote.organizationId,
+        userId: quote.userId,
+        jobId: job.id,
+        type: 'deduction',
+        amount: -quote.totalCredits,
+        reason: `Job creation: ${job.id}`,
+        idempotencyKey: `quote:${quoteId}:${Date.now()}`
+      };
+      await tx.creditLedger.create({ data: ledgerData });
+
+      // Update user balance (user-scoped)
+      await tx.user.update({
+        where: { id: user.id },
+        data: { creditBalance: { decrement: quote.totalCredits } }
       });
 
-      await tx.creditBalance.update({
-        where: { organizationId: quote.organizationId },
-        data: { balance: { decrement: quote.totalCredits } }
+      // Mirror to org balance
+      const orgCredits = await tx.creditBalance.findUnique({
+        where: { organizationId: quote.organizationId }
       });
+      if (orgCredits) {
+        await tx.creditBalance.update({
+          where: { organizationId: quote.organizationId },
+          data: { balance: { decrement: quote.totalCredits } }
+        });
+      }
 
       // Mark quote as used
       await tx.jobQuote.update({
