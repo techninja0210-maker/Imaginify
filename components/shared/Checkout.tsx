@@ -7,17 +7,20 @@ import { useToast } from "@/components/ui/use-toast";
 import { checkoutCredits } from "@/lib/actions/transaction.action";
 
 import { Button } from "../ui/button";
+import { cn } from "@/lib/utils";
 
 const Checkout = ({
   plan,
   amount,
   credits,
   buyerId,
+  className,
 }: {
   plan: string;
   amount: number;
   credits: number;
   buyerId: string;
+  className?: string;
 }) => {
   const { toast } = useToast();
 
@@ -118,7 +121,7 @@ const Checkout = ({
         <Button
           type="submit"
           role="link"
-          className="w-full rounded-full bg-purple-gradient bg-cover"
+          className={cn("w-full", className || "rounded-full bg-purple-gradient bg-cover")}
         >
           Buy Credit
         </Button>
