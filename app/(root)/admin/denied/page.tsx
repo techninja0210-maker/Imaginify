@@ -66,7 +66,7 @@ const AdminDeniedPage = async () => {
                   <p className="font-semibold mb-1">Option 4: Database Update</p>
                   <p className="text-sm text-gray-600">
                     <code className="bg-gray-100 px-2 py-1 rounded">
-                      UPDATE users SET role = 'ADMIN' WHERE email = '{user.email}';
+                      UPDATE users SET role = &apos;ADMIN&apos; WHERE email = &apos;{user.email}&apos;;
                     </code>
                   </p>
                 </div>

@@ -55,7 +55,7 @@ const SetupAdminPage = async ({ searchParams }: { searchParams: { grant?: string
               <ul className="list-disc list-inside mt-2 space-y-1">
                 <li>Remove this page or secure it with additional checks</li>
                 <li>Use the database script: <code className="bg-gray-100 px-1 rounded">node scripts/grant-admin.js &lt;email&gt;</code></li>
-                <li>Or manually update the database: <code className="bg-gray-100 px-1 rounded">UPDATE users SET role = 'ADMIN' WHERE email = 'your-email@gmail.com'</code></li>
+                <li>Or manually update the database: <code className="bg-gray-100 px-1 rounded">UPDATE users SET role = &apos;ADMIN&apos; WHERE email = &apos;your-email@gmail.com&apos;</code></li>
               </ul>
             </p>
           </div>
