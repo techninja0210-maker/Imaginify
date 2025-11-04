@@ -35,27 +35,27 @@ For **single-member organizations** (current setup):
 ✅ **Billing Page** (`/billing`): Shows `user.creditBalance`
 - Line 116: `Credits: {user?.creditBalance || 0}`
 
-## The Issue You're Seeing
+## Common Issue: Out of Sync Balances
 
-Based on your API response:
-- **User Balance**: 10 credits (`users.creditBalance`)
-- **Org Balance**: 1000 credits (`credit_balances.balance`)
+If you notice that your user balance and org balance are different:
+- **User Balance**: Shown in UI (`users.creditBalance`)
+- **Org Balance**: Stored in `credit_balances.balance`
 - **Status**: Out of sync ❌
 
-**What happened**: 
-- Your purchases updated the org balance to 1000
-- But the user balance stayed at 10
-- The UI shows **10** (the user balance) - which is correct behavior!
-- But you should have **1000** credits
+**What can happen**: 
+- Purchases or credits might update the org balance
+- But the user balance might not update
+- The UI shows the user balance (which is correct behavior)
+- But the balances should be synchronized
 
-**The fix**: Sync the user balance to match org balance (1000)
+**The fix**: Use the admin sync endpoint to sync the user balance to match org balance:
+- Visit `/admin/sync-balance` to sync balances for all users
+- Or use the API endpoint: `POST /api/admin/sync-credits`
 
 ## Summary
 
-- **User Balance** = Your personal credits (shown in UI everywhere)
+- **User Balance** = Personal credits (shown in UI everywhere)
 - **Org Balance** = Organization credits (legacy table, should match user balance)
 - **UI always shows**: User Balance (`users.creditBalance`)
-- **Problem**: Your user balance is 10, but should be 1000
-
-Visit `/admin/sync-balance?email=techninja0210@gmail.com` to sync them!
+- **Sync**: Use admin tools to keep balances in sync when needed
 

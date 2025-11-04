@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { startSubscriptionCheckout } from "@/lib/actions/subscription.actions";
 import { cn } from "@/lib/utils";
+import { getRewardfulReferral } from "@/lib/utils/rewardful";
 
 const SubscribeButton = ({ 
   lineItems,
@@ -16,7 +17,9 @@ const SubscribeButton = ({
 
   const onSubscribe = () => {
     startTransition(async () => {
-      await startSubscriptionCheckout(lineItems);
+      // Get Rewardful referral if available
+      const referral = getRewardfulReferral();
+      await startSubscriptionCheckout(lineItems, referral || undefined);
     });
   };
 

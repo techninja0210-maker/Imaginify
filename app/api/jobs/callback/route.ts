@@ -1,32 +1,30 @@
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/database/prisma';
+import { validateHMACRequest } from '@/lib/middleware/hmac';
+
+export const dynamic = "force-dynamic";
 
 /**
  * POST /api/jobs/callback
  * External service callback to update job status (e.g., from n8n)
  * 
  * Requires HMAC signature verification
+ * Header: X-HMAC-Signature (HMAC-SHA256 of request body)
  * Body: { jobId: string, status: string, resultUrl?: string, errorMessage?: string }
  */
-function verifyHMAC(body: string, signature: string | null): boolean {
-  const secret = process.env.SHARED_HMAC_SECRET;
-  if (!secret || !signature) return false;
-  const digest = crypto.createHmac('sha256', secret).update(body, 'utf8').digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signature));
-}
-
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    // Verify HMAC signature
-    const rawBody = await req.text();
-    const signature = req.headers.get('x-hmac-signature');
+    // Validate HMAC signature
+    const validation = await validateHMACRequest(req);
     
-    if (!verifyHMAC(rawBody, signature)) {
-      return NextResponse.json({ error: 'Invalid HMAC signature' }, { status: 401 });
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.error || 'Invalid HMAC signature' },
+        { status: 401 }
+      );
     }
 
-    const body = JSON.parse(rawBody);
+    const body = validation.body;
     const { jobId, status, resultUrl, errorMessage, metadata } = body;
 
     if (!jobId || !status) {

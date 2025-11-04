@@ -105,6 +105,23 @@ const Checkout = ({
   }, [toast]);
 
   const onCheckout = async () => {
+    // Get Rewardful referral if available
+    const referral = typeof window !== 'undefined' ? (() => {
+      const cookies = document.cookie.split(';');
+      for (const cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name.startsWith('rwf_') || name.startsWith('rewardful_')) {
+          return value;
+        }
+      }
+      const rewardful = (window as any).rewardful;
+      if (rewardful?.referral) {
+        return rewardful.referral;
+      }
+      const params = new URLSearchParams(window.location.search);
+      return params.get('ref') || params.get('rewardful') || undefined;
+    })() : undefined;
+
     const transaction = {
       plan,
       amount,
@@ -112,7 +129,7 @@ const Checkout = ({
       buyerId,
     };
 
-    await checkoutCredits(transaction);
+    await checkoutCredits(transaction, referral);
   };
 
   return (

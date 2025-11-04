@@ -6,10 +6,25 @@ import { handleError } from '../utils';
 import { prisma } from '../database/prisma';
 import { updateCredits, getUserOrganizationId } from './user.actions';
 
-export async function checkoutCredits(transaction: CheckoutTransactionParams) {
+export async function checkoutCredits(
+  transaction: CheckoutTransactionParams,
+  rewardfulReferral?: string
+) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
   const amount = Number(transaction.amount) * 100;
+
+  const metadata: Record<string, string> = {
+    plan: transaction.plan,
+    credits: String(transaction.credits),
+    buyerId: transaction.buyerId,
+    clerkUserId: transaction.buyerId,
+  };
+
+  // Add Rewardful referral if provided
+  if (rewardfulReferral) {
+    metadata.rewardful_referral = rewardfulReferral;
+  }
 
   const session = await stripe.checkout.sessions.create({
     line_items: [
@@ -24,12 +39,7 @@ export async function checkoutCredits(transaction: CheckoutTransactionParams) {
         quantity: 1
       }
     ],
-    metadata: {
-      plan: transaction.plan,
-      credits: transaction.credits,
-      buyerId: transaction.buyerId,
-      clerkUserId: transaction.buyerId,
-    },
+    metadata,
     mode: 'payment',
     success_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/?success=1&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/`,

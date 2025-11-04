@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "../database/prisma";
-import { handleError } from "../utils";
+import { handleError, requireGmailEmail } from "../utils";
 import { isDbDown } from "@/lib/errors";
 
 // CREATE
 export async function createUser(user: CreateUserParams) {
   try {
+    // Validate Gmail-only sign-in at the function level as well
+    requireGmailEmail(user.email, "user creation");
     // Create user with organization and initial credit balance
     const newUser = await prisma.user.create({
       data: {
@@ -74,6 +76,8 @@ export async function getUserById(userId: string) {
     });
 
     // If user doesn't exist, create them (for development/testing)
+    // Note: This should rarely happen since webhook handles user creation
+    // But it's a fallback for edge cases
     if (!user) {
       console.log(`User ${userId} not found, creating new user...`);
       
@@ -81,9 +85,18 @@ export async function getUserById(userId: string) {
       const { clerkClient } = await import('@clerk/nextjs/server');
       const clerkUser = await clerkClient.users.getUser(userId);
       
+      const email = clerkUser.emailAddresses[0]?.emailAddress;
+      
+      // Validate Gmail before creating (createUser also validates, but check here first)
+      if (email) {
+        requireGmailEmail(email, "user lookup");
+      } else {
+        throw new Error("No email address found for user");
+      }
+      
       const newUserData = {
         clerkId: clerkUser.id,
-        email: clerkUser.emailAddresses[0].emailAddress,
+        email: email,
         username: clerkUser.username || `user_${clerkUser.id.slice(0, 8)}`,
         firstName: clerkUser.firstName || 'User',
         lastName: clerkUser.lastName || 'Name',

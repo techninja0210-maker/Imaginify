@@ -155,3 +155,30 @@ export const deepMergeObjects = (obj1: any, obj2: any) => {
 
   return output;
 };
+
+// GMAIL VALIDATION
+/**
+ * Validates if an email address is a Gmail address
+ * Accepts both @gmail.com and @googlemail.com domains
+ */
+export function isGmailEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') {
+    return false;
+  }
+  
+  const normalizedEmail = email.toLowerCase().trim();
+  const gmailDomains = ['@gmail.com', '@googlemail.com'];
+  
+  return gmailDomains.some(domain => normalizedEmail.endsWith(domain));
+}
+
+/**
+ * Validates Gmail email and throws an error if invalid
+ */
+export function requireGmailEmail(email: string, context: string = 'sign-up'): void {
+  if (!isGmailEmail(email)) {
+    throw new Error(
+      `Gmail account required: Only Gmail accounts (@gmail.com or @googlemail.com) are allowed for ${context}. Your email: ${email}`
+    );
+  }
+}

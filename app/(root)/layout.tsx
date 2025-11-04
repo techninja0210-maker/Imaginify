@@ -1,6 +1,7 @@
 import MobileNav from '@/components/shared/MobileNav'
 import Sidebar from '@/components/shared/Sidebar'
 import { Toaster } from '@/components/ui/toaster'
+import { LowBalanceBanner } from '@/components/shared/LowBalanceBanner'
 import Link from 'next/link'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -8,6 +9,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     <main className="root">
       <Sidebar />
       <MobileNav />
+      <LowBalanceBanner />
 
       <div className="root-container">
         <div className="wrapper">

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/database/prisma';
 import { deductCredits } from '@/lib/actions/user.actions';
+import { checkAndNotifyLowBalance } from '@/lib/services/notifications';
 
 export const dynamic = "force-dynamic";
 
@@ -136,6 +137,20 @@ export async function POST(req: Request) {
 
       return job;
     });
+
+    // Check and notify if balance is low (after transaction completes)
+    // Get updated user balance
+    const updatedUser = await prisma.user.findUnique({
+      where: { clerkId: userId },
+      select: { creditBalance: true },
+    });
+
+    if (updatedUser) {
+      // Trigger low balance check (non-blocking)
+      checkAndNotifyLowBalance(userId, updatedUser.creditBalance).catch((err) => {
+        console.error("Error checking low balance after job creation:", err);
+      });
+    }
 
     return NextResponse.json({
       success: true,

@@ -42,6 +42,7 @@ export default async function SyncBalancePage({ searchParams }: { searchParams: 
     const orgCredits = user.organizationMembers?.[0]?.organization?.credits;
 
     if (!orgId || !orgCredits) {
+        
       return (
         <div className="p-8">
           <h1 className="text-2xl font-bold mb-4">Sync Credit Balance</h1>

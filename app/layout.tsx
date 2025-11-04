@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { ClerkProvider } from "@clerk/nextjs";
+import Script from "next/script";
 
 import "./globals.css";
 
@@ -21,12 +22,21 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const rewardfulId = process.env.NEXT_PUBLIC_REWARDFUL_ID;
+  
   return (
     <ClerkProvider appearance={{
       variables: { colorPrimary: '#624cf5' }
     }}>
       <html lang="en">
         <body className={cn("font-IBMPlex antialiased", IBMPlex.variable)}>
+          {rewardfulId && (
+            <Script
+              strategy="afterInteractive"
+              src="https://r.wdfl.co/rw.js"
+              data-rewardful={rewardfulId}
+            />
+          )}
           {children}
         </body>
       </html>

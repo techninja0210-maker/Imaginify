@@ -1,12 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { openCustomerPortalWithReturnUrl, ensureStripeCustomerForCurrentUser } from "@/lib/actions/subscription.actions";
+import { openCustomerPortalWithReturnUrl, ensureStripeCustomerForCurrentUser, changeSubscription } from "@/lib/actions/subscription.actions";
 import { prisma } from "@/lib/database/prisma";
 import { getUserById } from "@/lib/actions/user.actions";
 import { auth } from "@clerk/nextjs";
 import { notFound, redirect } from "next/navigation";
 import Stripe from "stripe";
 import Link from "next/link";
-import { CreditCard, Calendar, Coins, TrendingUp, Settings, ShoppingBag } from "lucide-react";
+import { CreditCard, Calendar, Coins, TrendingUp, Settings, ShoppingBag, FileText, Download, ArrowUp, ArrowDown } from "lucide-react";
 
 const BillingPage = async () => {
   const { userId } = auth();
@@ -89,6 +89,54 @@ const BillingPage = async () => {
   const autoTopUpEnabled = !!autoTopUpInfo?.autoTopUpEnabled;
   const autoTopUpAmount = autoTopUpInfo?.autoTopUpAmountCredits ?? 0;
   const lowBalanceThreshold = autoTopUpInfo?.lowBalanceThreshold ?? 0;
+
+  // Fetch invoices
+  let invoices: Stripe.Invoice[] = [];
+  let currentPriceId: string | null = null;
+  if (customerId && stripe) {
+    try {
+      const invoicesList = await stripe.invoices.list({
+        customer: customerId,
+        limit: 20,
+      });
+      invoices = invoicesList.data;
+
+      // Get current subscription price ID
+      const subs = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "active",
+        limit: 1,
+      });
+      if (subs.data.length > 0) {
+        const item = subs.data[0].items.data[0];
+        currentPriceId = item?.price?.id || null;
+      }
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+    }
+  }
+
+  // Available plans
+  const plans = [
+    {
+      name: "Starter",
+      price: "$10",
+      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER,
+      credits: 100,
+    },
+    {
+      name: "Pro",
+      price: "$30",
+      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO,
+      credits: 500,
+    },
+    {
+      name: "Business",
+      price: "$60",
+      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SCALE,
+      credits: 1000,
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -246,8 +294,81 @@ const BillingPage = async () => {
           </div>
         </div>
 
+        {/* Change Plan Section */}
+        {customerId && currentPriceId && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+            <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
+              <h2 className="text-lg font-semibold text-gray-900">Change Plan</h2>
+              <p className="text-sm text-gray-500 mt-1">Upgrade or downgrade your subscription</p>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {plans.map((plan) => {
+                  if (!plan.priceId) return null;
+                  const isCurrentPlan = plan.priceId === currentPriceId;
+                  // Determine if this is an upgrade or downgrade based on plan order
+                  const planOrder = ["Starter", "Pro", "Business"];
+                  const currentPlanIndex = plans.findIndex(p => p.priceId === currentPriceId);
+                  const thisPlanIndex = planOrder.indexOf(plan.name);
+                  const isUpgrade = !isCurrentPlan && thisPlanIndex > currentPlanIndex;
+                  const isDowngrade = !isCurrentPlan && thisPlanIndex < currentPlanIndex;
+
+                  return (
+                    <div
+                      key={plan.name}
+                      className={`p-4 rounded-lg border-2 ${
+                        isCurrentPlan
+                          ? "border-purple-500 bg-purple-50"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="mb-3">
+                        <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{plan.price}</p>
+                        <p className="text-xs text-gray-500 mt-1">{plan.credits} credits/month</p>
+                      </div>
+                      {isCurrentPlan ? (
+                        <Button disabled className="w-full" variant="outline">
+                          Current Plan
+                        </Button>
+                      ) : (
+                        <form action={async () => {
+                          "use server";
+                          await changeSubscription(plan.priceId!);
+                        }}>
+                          <Button
+                            type="submit"
+                            variant={isUpgrade ? "default" : "outline"}
+                            className={`w-full ${
+                              isUpgrade
+                                ? "bg-green-600 hover:bg-green-700 text-white"
+                                : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            {isUpgrade ? (
+                              <>
+                                <ArrowUp className="w-4 h-4 mr-2" />
+                                Upgrade
+                              </>
+                            ) : (
+                              <>
+                                <ArrowDown className="w-4 h-4 mr-2" />
+                                Downgrade
+                              </>
+                            )}
+                          </Button>
+                        </form>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Quick Actions */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
           <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
             <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
           </div>
@@ -273,6 +394,93 @@ const BillingPage = async () => {
                 </Button>
               </Link>
             </div>
+          </div>
+        </div>
+
+        {/* Invoices Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900">Invoices</h2>
+            </div>
+          </div>
+          <div className="p-6">
+            {!customerId ? (
+              <div className="text-center py-12">
+                <FileText className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                <p className="text-sm text-gray-500 font-medium">No billing account linked</p>
+                <p className="text-xs text-gray-400 mt-1">Link your billing account to view invoices</p>
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="text-center py-12">
+                <FileText className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                <p className="text-sm text-gray-500 font-medium">No invoices yet</p>
+                <p className="text-xs text-gray-400 mt-1">Your invoices will appear here once you make a purchase</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {invoices.map((invoice) => {
+                  const date = new Date(invoice.created * 1000).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                  });
+                  const amount = invoice.amount_paid ? (invoice.amount_paid / 100).toFixed(2) : '0.00';
+                  const status = invoice.status === 'paid' ? 'Paid' : invoice.status === 'open' ? 'Open' : invoice.status === 'void' ? 'Void' : 'Draft';
+                  const statusColor = invoice.status === 'paid' ? 'bg-green-100 text-green-700' : invoice.status === 'open' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700';
+                  const invoiceUrl = invoice.hosted_invoice_url || invoice.invoice_pdf;
+
+                  return (
+                    <div
+                      key={invoice.id}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-1">
+                            <p className="text-sm font-semibold text-gray-900 truncate">
+                              {invoice.number || invoice.id}
+                            </p>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
+                              {status}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            {date} • ${amount}
+                          </p>
+                          {invoice.description && (
+                            <p className="text-xs text-gray-400 mt-1 truncate">
+                              {invoice.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                        {invoiceUrl && (
+                          <a
+                            href={invoiceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            {invoice.hosted_invoice_url ? 'View' : 'Download'}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>

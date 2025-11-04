@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 
 import { createUser, deleteUser, updateUser } from "@/lib/actions/user.actions";
+import { requireGmailEmail } from "@/lib/utils";
 
 export async function POST(req: Request) {
   // You can find this in the Clerk Dashboard -> Webhooks -> choose the webhook
@@ -61,9 +62,50 @@ export async function POST(req: Request) {
   if (eventType === "user.created") {
     const { id, email_addresses, image_url, first_name, last_name, username } = evt.data;
 
+    // Get primary email address
+    const primaryEmail = email_addresses[0]?.email_address;
+    
+    if (!primaryEmail) {
+      console.error("[CLERK WEBHOOK] No email address found for user:", id);
+      // Delete the user in Clerk since we can't create them without an email
+      try {
+        await clerkClient.users.deleteUser(id);
+      } catch (deleteError) {
+        console.error("[CLERK WEBHOOK] Failed to delete user without email:", deleteError);
+      }
+      return NextResponse.json(
+        { error: "Email address is required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate Gmail-only sign-in
+    try {
+      requireGmailEmail(primaryEmail, "user creation");
+    } catch (gmailError: any) {
+      console.error("[CLERK WEBHOOK] Non-Gmail sign-up attempt:", primaryEmail);
+      
+      // Delete the user in Clerk since they're not allowed
+      try {
+        await clerkClient.users.deleteUser(id);
+        console.log("[CLERK WEBHOOK] Deleted non-Gmail user:", id);
+      } catch (deleteError) {
+        console.error("[CLERK WEBHOOK] Failed to delete non-Gmail user:", deleteError);
+      }
+      
+      return NextResponse.json(
+        { 
+          error: gmailError.message || "Only Gmail accounts are allowed",
+          rejected: true,
+          email: primaryEmail
+        },
+        { status: 403 }
+      );
+    }
+
     const user = {
       clerkId: id,
-      email: email_addresses[0].email_address,
+      email: primaryEmail,
       username: username!,
       firstName: first_name,
       lastName: last_name,
