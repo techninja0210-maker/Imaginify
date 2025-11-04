@@ -9,29 +9,86 @@ import { isDbDown } from "@/lib/errors";
 // ADD JOB
 export async function addJob({ job, userId, organizationId, path }: AddJobParams) {
   try {
-    const newJob = await prisma.job.create({
-      data: {
-        ...job,
-        // Ensure metadata conforms to Prisma Json type expectations
-        metadata: (job as any).metadata as any,
-        userId,
-        organizationId,
-      },
+    // Get user to check credits (userId is the database ID, not Clerk ID)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
       include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            clerkId: true
-          }
-        },
-        organization: true
+        organizationMembers: {
+          include: { organization: true }
+        }
       }
     });
 
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Check if user has enough credits (default cost: 1 credit per job)
+    const creditCost = 1; // Default cost, can be made configurable per job type
+    if (user.creditBalance < creditCost) {
+      throw new Error(`Insufficient credits. Required: ${creditCost}, Available: ${user.creditBalance}`);
+    }
+
+    // Create job and deduct credits in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the job
+      const newJob = await tx.job.create({
+        data: {
+          ...job,
+          // Ensure metadata conforms to Prisma Json type expectations
+          metadata: (job as any).metadata as any,
+          userId: user.id,
+          organizationId,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              clerkId: true
+            }
+          },
+          organization: true
+        }
+      });
+
+      // Create ledger entry for credit deduction
+      const idempotencyKey = `job:${newJob.id}:${Date.now()}`;
+      await tx.creditLedger.create({
+        data: {
+          organizationId,
+          userId: user.id,
+          jobId: newJob.id,
+          type: 'deduction',
+          amount: -creditCost,
+          reason: `Job creation: ${newJob.id}`,
+          idempotencyKey
+        }
+      });
+
+      // Update user's credit balance
+      await tx.user.update({
+        where: { id: user.id },
+        data: { creditBalance: { decrement: creditCost } }
+      });
+
+      // Mirror to org balance
+      const orgCredits = await tx.creditBalance.findUnique({
+        where: { organizationId }
+      });
+      if (orgCredits) {
+        await tx.creditBalance.update({
+          where: { organizationId },
+          data: { balance: { decrement: creditCost } }
+        });
+      }
+
+      return newJob;
+    });
+
     revalidatePath(path);
-    return JSON.parse(JSON.stringify(newJob));
+    return JSON.parse(JSON.stringify(result));
   } catch (error) {
     handleError(error);
   }

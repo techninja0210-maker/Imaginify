@@ -17,8 +17,8 @@ const AddTransformationTypePage = async ({ params: { type } }: SearchParamProps)
     user?.organizationMembers?.[0]?.organizationId ||
     user?.organizationMembers?.[0]?.organization?.id;
 
-  const creditBalance =
-    user?.organizationMembers?.[0]?.organization?.credits?.[0]?.balance || 0;
+  // Use user's credit balance (user-scoped) as the source of truth
+  const creditBalance = user?.creditBalance || 0;
 
   return (
     <>
