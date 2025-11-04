@@ -65,8 +65,8 @@ export async function GET() {
 
     const stripe = process.env.STRIPE_SECRET_KEY
       ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-          apiVersion: "2024-12-18.acacia",
-        })
+          apiVersion: "2023-10-16",
+        } as any)
       : null;
 
     // Fallback: try to find customer by email if no customerId

@@ -12,7 +12,7 @@ const PrivacyPage = () => {
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-4">1. Introduction</h2>
               <p className="p-16-regular text-gray-700">
-                ShoppableVideos.com ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Service.
+                ShoppableVideos.com (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Service.
               </p>
             </div>
 
@@ -100,7 +100,7 @@ const PrivacyPage = () => {
             </div>
 
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">10. Children's Privacy</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">10. Children&apos;s Privacy</h2>
               <p className="p-16-regular text-gray-700">
                 Our Service is not intended for children under 13 years of age. We do not knowingly collect personal information from children under 13. If you are a parent or guardian and believe your child has provided us with personal information, please contact us.
               </p>
@@ -116,7 +116,7 @@ const PrivacyPage = () => {
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-4">12. Changes to This Privacy Policy</h2>
               <p className="p-16-regular text-gray-700">
-                We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last updated" date. You are advised to review this Privacy Policy periodically for any changes.
+                We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the &quot;Last updated&quot; date. You are advised to review this Privacy Policy periodically for any changes.
               </p>
             </div>
 

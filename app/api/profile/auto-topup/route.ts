@@ -33,6 +33,13 @@ export async function POST(req: Request) {
         lowBalanceThreshold: enabled ? Number(threshold) : undefined,
         autoTopUpAmountCredits: enabled ? Number(amount) : null,
       },
+      include: {
+        organizationMembers: {
+          select: {
+            organizationId: true,
+          },
+        },
+      },
     });
 
     // Also update org balance settings for backward compatibility
