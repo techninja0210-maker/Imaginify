@@ -57,7 +57,7 @@ export function FixMissingCreditsContent() {
       <div>
         <h2 className="text-2xl font-bold text-gray-900">Fix Missing Credits</h2>
         <p className="mt-1 text-sm text-gray-500">
-          Grant credits for Stripe purchases that don't have ledger entries yet.
+          Grant credits for Stripe purchases that don&apos;t have ledger entries yet.
         </p>
       </div>
 
@@ -71,7 +71,7 @@ export function FixMissingCreditsContent() {
               </h3>
               <p className="text-sm text-gray-600 mb-4">
                 This will scan all Stripe checkout sessions and grant credits for any paid sessions
-                that don't have corresponding ledger entries in the database.
+                that don&apos;t have corresponding ledger entries in the database.
               </p>
               <ul className="text-sm text-gray-500 space-y-1 mb-4">
                 <li>• Only processes paid sessions</li>

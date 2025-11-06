@@ -216,7 +216,7 @@ const BillingPage = async () => {
                 {customerId ? (
                   <form action={async () => {
                     "use server";
-                    await openCustomerPortalWithReturnUrl(customerId, "https://www.shoppablevideos.com/");
+                    await openCustomerPortalWithReturnUrl(customerId, `${process.env.NEXT_PUBLIC_SERVER_URL || 'https://shoppablevideos.com'}/billing`);
                   }}>
                     <Button
                       type="submit"

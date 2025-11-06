@@ -9,6 +9,7 @@ import { prisma } from "@/lib/database/prisma"
 import Stripe from "stripe"
 import dynamicImport from "next/dynamic"
 import { updateCredits } from "@/lib/actions/user.actions"
+import { revalidatePath } from "next/cache"
 
 // Dynamically import client components - must be client-side only
 const AutoGrantCredits = dynamicImport(() => import("@/components/shared/AutoGrantCredits").then(mod => ({ default: mod.AutoGrantCredits })), { 
