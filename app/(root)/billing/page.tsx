@@ -8,6 +8,10 @@ import Stripe from "stripe";
 import Link from "next/link";
 import { CreditCard, Calendar, Coins, TrendingUp, Settings, ShoppingBag, FileText, Download, ArrowUp, ArrowDown } from "lucide-react";
 
+// Force dynamic rendering to ensure fresh credit data
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const BillingPage = async () => {
   const { userId } = auth();
   if (!userId) redirect("/sign-in");

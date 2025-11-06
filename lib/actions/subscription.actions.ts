@@ -22,6 +22,23 @@ export async function startSubscriptionCheckout(
     metadata.rewardful_referral = rewardfulReferral;
   }
 
+  // Determine the base URL - detect development vs production
+  const getBaseUrl = () => {
+    const isDevelopment = process.env.NODE_ENV === 'development' || 
+                         !process.env.NEXT_PUBLIC_SERVER_URL ||
+                         process.env.NEXT_PUBLIC_SERVER_URL.includes('localhost') ||
+                         process.env.NEXT_PUBLIC_SERVER_URL.includes('127.0.0.1') ||
+                         process.env.NEXT_PUBLIC_SERVER_URL.includes('192.168');
+    
+    if (isDevelopment) {
+      return 'http://localhost:3000';
+    }
+    
+    return process.env.NEXT_PUBLIC_SERVER_URL || 'https://shoppablevideos.com';
+  };
+
+  const baseUrl = getBaseUrl();
+
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     payment_method_types: ["card"],
@@ -30,8 +47,8 @@ export async function startSubscriptionCheckout(
       quantity: item.quantity,
     })),
     metadata,
-    success_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/billing?success=1&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/pricing`,
+    success_url: `${baseUrl}/billing?success=1&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${baseUrl}/pricing`,
   });
 
   redirect(session.url!);
@@ -43,9 +60,23 @@ export async function openCustomerPortal(customerId: string) {
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
+  // Determine the base URL for return URL
+  const getBaseUrl = () => {
+    const isDevelopment = process.env.NODE_ENV === 'development' || 
+                         !process.env.NEXT_PUBLIC_SERVER_URL ||
+                         process.env.NEXT_PUBLIC_SERVER_URL.includes('localhost') ||
+                         process.env.NEXT_PUBLIC_SERVER_URL.includes('127.0.0.1');
+    
+    if (isDevelopment) {
+      return 'http://localhost:3000';
+    }
+    
+    return process.env.NEXT_PUBLIC_SERVER_URL || 'https://shoppablevideos.com';
+  };
+
   const portal = await stripe.billingPortal.sessions.create({
     customer: customerId,
-    return_url: `${process.env.NEXT_PUBLIC_SERVER_URL}/billing`,
+    return_url: `${getBaseUrl()}/billing`,
   });
 
   redirect(portal.url);

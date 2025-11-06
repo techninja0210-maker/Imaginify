@@ -10,8 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
-    "db:seed": "ts-node --transpile-only prisma/seed.ts",
-    "db:keepalive": "node scripts/keepalive.js"
+    "db:seed": "ts-node --transpile-only prisma/seed.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^4.29.6",

@@ -4,6 +4,7 @@ import { updateCredits, getUserOrganizationId } from "@/lib/actions/user.actions
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/database/prisma";
+import { revalidatePath } from "next/cache";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2023-10-16",
@@ -65,6 +66,22 @@ export async function POST(request: Request) {
     // Use same idempotency key format as confirm endpoint: stripe:session:${sessionId}
     if (transaction.buyerId && typeof transaction.buyerId === 'string' && transaction.credits > 0) {
       try {
+        // Verify user exists before attempting to grant credits
+        const userExists = await prisma.user.findUnique({
+          where: { clerkId: transaction.buyerId },
+          select: { id: true }
+        });
+
+        if (!userExists) {
+          console.error(`[WEBHOOK] User not found: ${transaction.buyerId}`);
+          return NextResponse.json({ 
+            message: "User not found", 
+            transaction: newTransaction,
+            error: `User ${transaction.buyerId} does not exist`,
+            buyerId: transaction.buyerId
+          }, { status: 404 });
+        }
+
         const idemKey = `stripe:session:${transaction.stripeId}`;
         // Check if already processed (prevent double-grant if confirm endpoint already handled it)
         const existingLedger = await prisma.creditLedger.findUnique({
@@ -87,11 +104,31 @@ export async function POST(request: Request) {
           `Top-up purchase ${transaction.stripeId}`, 
           idemKey
         );
-        console.log(`Credits granted via webhook: ${transaction.credits} to ${transaction.buyerId}`);
+        
+        if (!creditResult) {
+          console.error(`[WEBHOOK] updateCredits returned null/undefined for session ${transaction.stripeId}`);
+          throw new Error('updateCredits returned null/undefined');
+        }
+        
+        // Verify credits were actually added
+        const verifyUser = await prisma.user.findUnique({
+          where: { clerkId: transaction.buyerId },
+          select: { creditBalance: true }
+        });
+        
+        console.log(`[WEBHOOK] Credits granted via webhook: ${transaction.credits} to ${transaction.buyerId}, new balance: ${verifyUser?.creditBalance || 'unknown'}`);
+        
+        // Revalidate all pages to show updated credits immediately
+        revalidatePath('/');
+        revalidatePath('/profile');
+        revalidatePath('/billing');
+        revalidatePath('/credits');
+        
         return NextResponse.json({ 
           message: "OK", 
           transaction: newTransaction,
-          creditsGranted: transaction.credits
+          creditsGranted: transaction.credits,
+          newBalance: verifyUser?.creditBalance || null
         });
       } catch (creditError: any) {
         console.error('Credit grant failed in webhook:', creditError);

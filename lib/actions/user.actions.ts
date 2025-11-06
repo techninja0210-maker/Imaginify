@@ -60,6 +60,11 @@ export async function createUser(user: CreateUserParams) {
 // READ
 export async function getUserById(userId: string) {
   try {
+    // Revalidate cache to ensure fresh data
+    revalidatePath('/');
+    revalidatePath('/profile');
+    revalidatePath('/billing');
+    
     let user = await prisma.user.findUnique({
       where: { clerkId: userId },
       include: {
@@ -186,7 +191,7 @@ export async function updateCredits(userId: string, creditFee: number, reason: s
     // Use transaction to ensure atomicity with timeout
     const result = await prisma.$transaction(async (tx) => {
       // Create ledger entry (still using organizationId for compatibility)
-      const user = await tx.user.findUnique({
+      let user = await tx.user.findUnique({
         where: { clerkId: userId },
         include: {
           organizationMembers: {
@@ -195,11 +200,54 @@ export async function updateCredits(userId: string, creditFee: number, reason: s
         }
       });
 
-      if (!user || !user.organizationMembers.length) {
-        throw new Error("User organization not found");
+      if (!user) {
+        throw new Error("User not found");
       }
 
-      const organizationId = user.organizationMembers[0].organization.id;
+      // Auto-create organization if user doesn't have one
+      let organizationId: string;
+      if (!user.organizationMembers.length) {
+        console.log(`[UPDATE_CREDITS] User ${userId} has no organization, creating one automatically`);
+        const organization = await tx.organization.create({
+          data: {
+            clerkId: `org_${user.clerkId}`,
+            name: `${user.firstName || user.username || 'User'}'s Organization`,
+            credits: {
+              create: {
+                balance: user.creditBalance || 0,
+                lowBalanceThreshold: user.lowBalanceThreshold || 10,
+                autoTopUpEnabled: false
+              }
+            }
+          }
+        });
+
+        await tx.organizationMember.create({
+          data: {
+            organizationId: organization.id,
+            userId: user.id,
+            role: 'owner'
+          }
+        });
+
+        organizationId = organization.id;
+        
+        // Refresh user data to include the new organization
+        const refreshedUser = await tx.user.findUnique({
+          where: { clerkId: userId },
+          include: {
+            organizationMembers: {
+              include: { organization: true }
+            }
+          }
+        });
+        
+        if (refreshedUser) {
+          user = refreshedUser;
+        }
+      } else {
+        organizationId = user.organizationMembers[0].organization.id;
+      }
 
       const ledgerData: any = {
         organizationId,
@@ -257,6 +305,13 @@ export async function updateCredits(userId: string, creditFee: number, reason: s
       }
 
       console.log(`[UPDATE_CREDITS] Successfully updated credits: userId=${userId}, increment=${creditFee}, oldBalance=${user.creditBalance}, newBalance=${updatedUser.creditBalance}`);
+      
+      // Revalidate cache to ensure fresh data is shown immediately
+      revalidatePath('/');
+      revalidatePath('/profile');
+      revalidatePath('/billing');
+      revalidatePath('/credits');
+      
       return updatedUser;
     }, {
       maxWait: 10000, // Maximum time to wait for a transaction slot (10 seconds)

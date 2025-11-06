@@ -7,6 +7,10 @@ import { getUserJobs } from "@/lib/actions/job.actions";
 import { getUserById } from "@/lib/actions/user.actions";
 import Link from "next/link";
 
+// Force dynamic rendering to ensure fresh credit data
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const Profile = async ({ searchParams }: SearchParamProps) => {
   const page = Number(searchParams?.page) || 1;
   const { userId } = auth();

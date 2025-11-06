@@ -7,22 +7,150 @@ import Image from "next/image"
 import Link from "next/link"
 import { prisma } from "@/lib/database/prisma"
 import Stripe from "stripe"
-import dynamic from "next/dynamic"
+import dynamicImport from "next/dynamic"
+import { updateCredits } from "@/lib/actions/user.actions"
+
+// Dynamically import client components - must be client-side only
+const AutoGrantCredits = dynamicImport(() => import("@/components/shared/AutoGrantCredits").then(mod => ({ default: mod.AutoGrantCredits })), { 
+  ssr: false,
+  loading: () => null
+})
+
+const ManualCreditGrant = dynamicImport(() => import("@/components/shared/ManualCreditGrant").then(mod => ({ default: mod.ManualCreditGrant })), { 
+  ssr: false,
+  loading: () => null
+})
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2023-10-16",
 })
 
-const Home = async ({ searchParams }: SearchParamProps) => {
+// Force dynamic rendering to prevent caching and ensure fresh credit data
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const Home = async ({ 
+  searchParams 
+}: { 
+  searchParams: { [key: string]: string | string[] | undefined } 
+}) => {
   const { userId } = auth();
   const page = Number(searchParams?.page) || 1;
   const searchQuery = (searchParams?.query as string) || '';
 
+  // Auto-grant credits if returning from successful Stripe checkout
+  // Log all searchParams to debug
+  console.log(`[HOME PAGE] All searchParams:`, JSON.stringify(searchParams));
+  console.log(`[HOME PAGE] searchParams type:`, typeof searchParams);
+  console.log(`[HOME PAGE] searchParams keys:`, Object.keys(searchParams || {}));
+  
+  // Handle both string and string[] types from Next.js searchParams
+  const sessionIdRaw = searchParams?.session_id;
+  const successParamRaw = searchParams?.success;
+  
+  const sessionId = Array.isArray(sessionIdRaw) ? sessionIdRaw[0] : sessionIdRaw as string | undefined;
+  const successParam = Array.isArray(successParamRaw) ? successParamRaw[0] : successParamRaw as string | undefined;
+  
+  const success = successParam === '1' || successParam === 'true';
+  let creditsGranted = 0;
+  let showSuccessMessage = false;
+  
+  console.log(`[HOME PAGE] Check auto-grant: userId=${userId}, success=${success} (param="${successParam}"), sessionId=${sessionId}, hasStripeKey=${!!process.env.STRIPE_SECRET_KEY}`);
+  
+  if (userId && success && sessionId && process.env.STRIPE_SECRET_KEY) {
+    try {
+      console.log(`[HOME PAGE] Attempting to auto-grant credits for session: ${sessionId}`);
+      
+      // Check if already processed
+      const idemKey = `stripe:session:${sessionId}`;
+      const existingLedger = await prisma.creditLedger.findUnique({
+        where: { idempotencyKey: idemKey }
+      });
+
+      if (existingLedger) {
+        // Already processed - show message
+        creditsGranted = existingLedger.amount;
+        showSuccessMessage = true;
+        console.log(`[HOME PAGE] Credits already granted for session ${sessionId}: ${creditsGranted} credits`);
+      } else {
+        // Get Stripe session
+        console.log(`[HOME PAGE] Fetching Stripe session: ${sessionId}`);
+        const stripeSession = await stripe.checkout.sessions.retrieve(sessionId);
+        console.log(`[HOME PAGE] Stripe session payment_status: ${stripeSession.payment_status}`);
+        
+        if (stripeSession.payment_status === 'paid') {
+          const metadata: any = stripeSession.metadata || {};
+          const buyerId = metadata.clerkUserId || metadata.buyerId;
+          const credits = Number(metadata.credits || 0);
+          
+          console.log(`[HOME PAGE] Session metadata - buyerId: ${buyerId}, credits: ${credits}, currentUserId: ${userId}`);
+
+          // Verify this is the current user's session
+          if (buyerId === userId && credits > 0) {
+            // Verify user exists before granting
+            const userExists = await prisma.user.findUnique({
+              where: { clerkId: userId },
+              select: { id: true, creditBalance: true }
+            });
+
+            if (userExists) {
+              console.log(`[HOME PAGE] User found, current balance: ${userExists.creditBalance}, granting ${credits} credits`);
+              
+              try {
+                // Grant credits directly
+                const result = await updateCredits(
+                  userId,
+                  credits,
+                  `Checkout confirmation ${sessionId}`,
+                  idemKey
+                );
+                
+                if (result) {
+                  creditsGranted = credits;
+                  showSuccessMessage = true;
+                  const newBalance = (result as any)?.creditBalance || userExists.creditBalance + credits;
+                  console.log(`[HOME PAGE] ✅ Credits granted successfully: ${credits} credits, new balance: ${newBalance}`);
+                  
+                  // Force revalidation of all pages to show updated credits
+                  revalidatePath('/');
+                  revalidatePath('/profile');
+                  revalidatePath('/billing');
+                  revalidatePath('/credits');
+                } else {
+                  console.error(`[HOME PAGE] ❌ updateCredits returned null/undefined`);
+                }
+              } catch (grantError: any) {
+                console.error(`[HOME PAGE] ❌ Failed to grant credits:`, grantError?.message || grantError);
+                // Continue - client-side component or webhook will handle it
+              }
+            } else {
+              console.error(`[HOME PAGE] ❌ User not found: ${userId}`);
+            }
+          } else {
+            console.warn(`[HOME PAGE] ⚠️ Session buyerId (${buyerId}) doesn't match current user (${userId}) or credits <= 0`);
+          }
+        } else {
+          console.warn(`[HOME PAGE] ⚠️ Session not paid: ${stripeSession.payment_status}`);
+        }
+      }
+    } catch (error: any) {
+      console.error('[HOME PAGE] ❌ Failed to auto-grant credits:', error?.message || error);
+      // Continue - webhook or manual grant will handle it
+    }
+  } else {
+    console.log(`[HOME PAGE] Skipping auto-grant: userId=${!!userId}, success=${success}, sessionId=${!!sessionId}, hasStripeKey=${!!process.env.STRIPE_SECRET_KEY}`);
+  }
+
   const jobs = await getAllJobs({ page, searchQuery})
   
-  // Get user data if logged in
+  // Get user data if logged in (refresh to get updated balance - force fresh fetch)
   const user = userId ? await getUserById(userId) : null;
   const credits = user?.creditBalance || 0;
+  
+  // Log current balance for debugging
+  if (userId && success && sessionId) {
+    console.log(`[HOME PAGE] Current user balance: ${credits}, creditsGranted: ${creditsGranted}`);
+  }
 
   // Get subscription and billing info
   let currentPlan = "Free";
@@ -90,10 +218,33 @@ const Home = async ({ searchParams }: SearchParamProps) => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-gray-50">
+      {/* Auto-grant credits component - ensures credits are granted when returning from Stripe */}
+      {/* This component MUST run on client side to detect URL parameters */}
+      <AutoGrantCredits />
+      {/* Manual grant button - fallback if automatic grant doesn't work */}
+      <ManualCreditGrant />
       {userId ? (
         // Dashboard view for logged-in users
         <div className="space-y-8 pb-8">
+          {/* Success Message */}
+          {showSuccessMessage && creditsGranted > 0 && (
+            <div className="max-w-7xl mx-auto px-8 md:px-12 pt-8">
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-xl">✓</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-green-900">Credits Added Successfully!</h3>
+                    <p className="text-sm text-green-700 mt-1">
+                      {creditsGranted.toLocaleString()} credits have been added to your account.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Hero Section */}
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 shadow-xl">
             <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]"></div>
@@ -220,14 +371,6 @@ const Home = async ({ searchParams }: SearchParamProps) => {
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Quote Tester */}
-          <div className="max-w-7xl mx-auto px-8 md:px-12">
-            {(() => {
-              const QuoteTester = dynamic(() => import("@/components/shared/QuoteTester"), { ssr: false });
-              return <QuoteTester />
-            })()}
           </div>
 
           {/* Recent Jobs Section */}

@@ -34,13 +34,21 @@ const Checkout = ({
     if (query.get("success")) {
       const sessionId = query.get("session_id");
       if (sessionId) {
+        // Show initial toast
+        toast({
+          title: "Payment successful!",
+          description: "Processing your credits...",
+          duration: 3000,
+          className: "success-toast",
+        });
+
         // Confirm credits in case webhooks aren't available locally
         fetch(`/api/stripe/confirm?session_id=${encodeURIComponent(sessionId)}`)
           .then(async (res) => {
             const data = await res.json();
             console.log('[CHECKOUT] Credit confirmation response:', data);
             
-            if (res.ok && !data.skipped) {
+            if (res.ok && !data.skipped && data.creditsGranted) {
               // Successfully confirmed - refresh page to show updated credits
               toast({
                 title: "Credits added!",
@@ -79,19 +87,30 @@ const Checkout = ({
             }
           })
           .catch((err) => {
-            console.error('Credit confirmation fetch error:', err);
+            console.error('[CHECKOUT] Credit confirmation fetch error:', err);
+            toast({
+              title: "Processing...",
+              description: "Webhook will process your credits shortly. Please refresh in a moment.",
+              duration: 5000,
+              className: "info-toast",
+            });
             // Still refresh - webhook might handle it
             setTimeout(() => {
               window.location.href = '/';
             }, 2000);
           });
+      } else {
+        // No session ID but success=true - might be webhook processed
+        toast({
+          title: "Payment successful!",
+          description: "Credits are being added to your account...",
+          duration: 3000,
+          className: "success-toast",
+        });
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
       }
-      toast({
-        title: "Order placed!",
-        description: "Credits are being added to your account...",
-        duration: 5000,
-        className: "success-toast",
-      });
     }
 
     if (query.get("canceled")) {
