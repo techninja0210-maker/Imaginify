@@ -162,7 +162,7 @@ export const POST = withHMAC(async (req, body, _rawBody, headers) => {
         data: {
           creditBalance: { increment: refundAmount },
           creditBalanceVersion: { increment: 1 },
-        },
+        } as any,
       });
 
       if (updateResult.count === 0) {
@@ -190,11 +190,11 @@ export const POST = withHMAC(async (req, body, _rawBody, headers) => {
 
         if (orgBalance) {
           const orgUpdateResult = await tx.creditBalance.updateMany({
-            where: { organizationId: originalLedger.organizationId, version: orgBalance.version },
+            where: { organizationId: originalLedger.organizationId, version: orgBalance.version } as any,
             data: {
               balance: { increment: refundAmount },
               version: { increment: 1 },
-            },
+            } as any,
           });
 
           if (orgUpdateResult.count === 0) {
