@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { withHMAC } from "@/lib/middleware/hmac";
 import { prisma } from "@/lib/database/prisma";
 import { assertRateLimit, RateLimitError } from "@/lib/services/rate-limit";
@@ -81,7 +82,11 @@ export const GET = withHMAC(async (_req, _body, _rawBody, headers) => {
 
     const totalRefunded = relatedRefunds.reduce((sum, entry) => sum + entry.amount, 0);
 
-    const ledgerWithBalance = ledger as typeof ledger & { balanceAfter: number | null };
+    const ledgerExpanded = ledger as typeof ledger & {
+      balanceAfter: number | null;
+      breakdown: Prisma.JsonValue | null;
+      metadata: Prisma.JsonValue | null;
+    };
 
     return NextResponse.json(
       {
@@ -91,10 +96,10 @@ export const GET = withHMAC(async (_req, _body, _rawBody, headers) => {
           type: ledger.type,
           amount: ledger.amount,
           reason: ledger.reason,
-          balanceAfter: ledgerWithBalance.balanceAfter ?? null,
+          balanceAfter: ledgerExpanded.balanceAfter ?? null,
           createdAt: ledger.createdAt,
-          breakdown: ledger.breakdown,
-          metadata: ledger.metadata,
+          breakdown: ledgerExpanded.breakdown ?? null,
+          metadata: ledgerExpanded.metadata ?? null,
           environment: ledger.environment,
           status: ledger.status,
           clientId: ledger.clientId,
