@@ -155,7 +155,10 @@ export const POST = withHMAC(async (req, body, _rawBody, headers) => {
 
       const currentVersion = user.creditBalanceVersion;
       const updateResult = await tx.user.updateMany({
-        where: { id: user.id, creditBalanceVersion: currentVersion },
+        where: {
+          id: user.id,
+          creditBalanceVersion: currentVersion as any,
+        },
         data: {
           creditBalance: { increment: refundAmount },
           creditBalanceVersion: { increment: 1 },
