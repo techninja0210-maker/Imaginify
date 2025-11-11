@@ -45,12 +45,24 @@ export const GET = withHMAC(async (_req, _body, _rawBody, headers) => {
 
     const ledger = await prisma.creditLedger.findUnique({
       where: { id: ledgerId },
-      include: {
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        reason: true,
+        balanceAfter: true,
+        createdAt: true,
+        breakdown: true,
+        metadata: true,
+        environment: true,
+        status: true,
+        clientId: true,
+        externalJobId: true,
+        idempotencyKey: true,
         user: {
           select: {
             clerkId: true,
             email: true,
-            creditBalance: true,
           },
         },
         organization: {
