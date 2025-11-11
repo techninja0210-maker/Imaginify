@@ -143,19 +143,15 @@ export const POST = withHMAC(async (req, body, _rawBody, headers) => {
     }
 
     const refundResult = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({
+      const userRecord = await tx.user.findUnique({
         where: { id: originalLedger.userId || "" },
-        select: {
-          id: true,
-          clerkId: true,
-          creditBalance: true,
-          creditBalanceVersion: true,
-        },
       });
 
-      if (!user) {
+      if (!userRecord) {
         throw new Error("User not found for refund");
       }
+
+      const user = userRecord as typeof userRecord & { creditBalanceVersion: number };
 
       const currentVersion = user.creditBalanceVersion;
       const updateResult = await tx.user.updateMany({
@@ -172,19 +168,17 @@ export const POST = withHMAC(async (req, body, _rawBody, headers) => {
         throw conflict;
       }
 
-      const updatedUser = await tx.user.findUnique({
+      const updatedUserRecord = await tx.user.findUnique({
         where: { id: user.id },
-        select: {
-          id: true,
-          clerkId: true,
-          creditBalance: true,
-          creditBalanceVersion: true,
-        },
       });
 
-      if (!updatedUser) {
+      if (!updatedUserRecord) {
         throw new Error("User not found after refund");
       }
+
+      const updatedUser = updatedUserRecord as typeof updatedUserRecord & {
+        creditBalanceVersion: number;
+      };
 
       if (originalLedger.organizationId) {
         const orgBalance = await tx.creditBalance.findUnique({
