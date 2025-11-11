@@ -45,20 +45,7 @@ export const GET = withHMAC(async (_req, _body, _rawBody, headers) => {
 
     const ledger = await prisma.creditLedger.findUnique({
       where: { id: ledgerId },
-      select: {
-        id: true,
-        type: true,
-        amount: true,
-        reason: true,
-        balanceAfter: true,
-        createdAt: true,
-        breakdown: true,
-        metadata: true,
-        environment: true,
-        status: true,
-        clientId: true,
-        externalJobId: true,
-        idempotencyKey: true,
+      include: {
         user: {
           select: {
             clerkId: true,
@@ -94,6 +81,8 @@ export const GET = withHMAC(async (_req, _body, _rawBody, headers) => {
 
     const totalRefunded = relatedRefunds.reduce((sum, entry) => sum + entry.amount, 0);
 
+    const ledgerWithBalance = ledger as typeof ledger & { balanceAfter: number | null };
+
     return NextResponse.json(
       {
         success: true,
@@ -102,7 +91,7 @@ export const GET = withHMAC(async (_req, _body, _rawBody, headers) => {
           type: ledger.type,
           amount: ledger.amount,
           reason: ledger.reason,
-          balanceAfter: ledger.balanceAfter,
+          balanceAfter: ledgerWithBalance.balanceAfter ?? null,
           createdAt: ledger.createdAt,
           breakdown: ledger.breakdown,
           metadata: ledger.metadata,
