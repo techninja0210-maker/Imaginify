@@ -145,6 +145,12 @@ export const POST = withHMAC(async (req, body, _rawBody, headers) => {
     const refundResult = await prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { id: originalLedger.userId || "" },
+        select: {
+          id: true,
+          clerkId: true,
+          creditBalance: true,
+          creditBalanceVersion: true,
+        },
       });
 
       if (!user) {
@@ -168,6 +174,12 @@ export const POST = withHMAC(async (req, body, _rawBody, headers) => {
 
       const updatedUser = await tx.user.findUnique({
         where: { id: user.id },
+        select: {
+          id: true,
+          clerkId: true,
+          creditBalance: true,
+          creditBalanceVersion: true,
+        },
       });
 
       if (!updatedUser) {
