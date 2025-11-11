@@ -86,6 +86,11 @@ export const GET = withHMAC(async (_req, _body, _rawBody, headers) => {
       balanceAfter: number | null;
       breakdown: Prisma.JsonValue | null;
       metadata: Prisma.JsonValue | null;
+      environment: string;
+      status: string;
+      clientId: string | null;
+      externalJobId: string | null;
+      idempotencyKey: string | null;
     };
 
     return NextResponse.json(
@@ -100,11 +105,11 @@ export const GET = withHMAC(async (_req, _body, _rawBody, headers) => {
           createdAt: ledger.createdAt,
           breakdown: ledgerExpanded.breakdown ?? null,
           metadata: ledgerExpanded.metadata ?? null,
-          environment: ledger.environment,
-          status: ledger.status,
-          clientId: ledger.clientId,
-          externalJobId: ledger.externalJobId,
-          idempotencyKey: ledger.idempotencyKey,
+          environment: ledgerExpanded.environment,
+          status: ledgerExpanded.status,
+          clientId: ledgerExpanded.clientId,
+          externalJobId: ledgerExpanded.externalJobId,
+          idempotencyKey: ledgerExpanded.idempotencyKey,
           user: ledger.user
             ? {
                 clerkId: ledger.user.clerkId,
