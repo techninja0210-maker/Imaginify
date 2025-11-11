@@ -14,7 +14,7 @@ export function canDeleteUsers(role: UserRole): boolean {
 }
 
 export function canUpdateUserRoles(role: UserRole): boolean {
-  return role === "SUPER_ADMIN";
+  return role === "ADMIN" || role === "SUPER_ADMIN";
 }
 
 export function canAccessAdmin(role: UserRole): boolean {

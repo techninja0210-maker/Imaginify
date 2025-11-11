@@ -152,6 +152,8 @@ export function UsersContent({ users, currentUser, searchQuery: q }: UsersConten
                         userId={u.id}
                         currentRole={u.role}
                         searchQuery={q}
+                        viewerRole={currentUser.role}
+                        viewerId={currentUser.id}
                       />
                     )}
 

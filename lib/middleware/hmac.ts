@@ -3,32 +3,80 @@ import crypto from "crypto";
 
 /**
  * HMAC Verification Utility
- * 
+ *
  * Verifies HMAC signatures for secure external API calls (e.g., from n8n, webhooks)
- * 
+ *
  * Usage:
- * - Generate signature: HMAC-SHA256(payload, secret)
- * - Send in header: X-HMAC-Signature
- * - Verify using this middleware
+ * - Generate signature: HMAC-SHA256(secret, canonicalMessage)
+ * - Canonical message format: `${method}\n${path}\n${timestamp}\n${body}`
+ * - Required headers:
+ *   - X-HMAC-Signature
+ *   - X-Client-Id
+ *   - X-Timestamp (ISO8601)
+ *   - X-Idempotency-Key
+ *   - X-Key-Id (optional for key rotation)
+ *   - X-Env (optional; defaults to production)
  */
 
 const HMAC_HEADER = "x-hmac-signature";
+const KEY_ID_HEADER = "x-key-id";
+const CLIENT_ID_HEADER = "x-client-id";
+const TIMESTAMP_HEADER = "x-timestamp";
+const IDEMPOTENCY_HEADER = "x-idempotency-key";
+const ENV_HEADER = "x-env";
+
 const HMAC_SECRET_ENV = "SHARED_HMAC_SECRET";
+const ALLOWED_TIMESTAMP_SKEW_MS = 5 * 60 * 1000; // 5 minutes
+
+export type ValidatedHMACHeaders = {
+  clientId: string | null;
+  timestamp: string | null;
+  idempotencyKey: string | null;
+  keyId: string | null;
+  environment: "production" | "sandbox";
+};
+
+function sanitizeKeyId(keyId?: string | null): string | null {
+  if (!keyId) return null;
+  return keyId.replace(/[^A-Za-z0-9_]/g, "").toUpperCase();
+}
+
+function getSecretForKeyId(keyId?: string | null): string | null {
+  const sanitized = sanitizeKeyId(keyId);
+
+  if (sanitized) {
+    const envKey = `SHARED_HMAC_SECRET_${sanitized}`;
+    if (process.env[envKey]) {
+      return process.env[envKey] || null;
+    }
+  }
+
+  return process.env[HMAC_SECRET_ENV] || null;
+}
+
+function buildCanonicalMessage(
+  method: string,
+  path: string,
+  timestamp: string,
+  body: string
+): string {
+  return `${method.toUpperCase()}\n${path}\n${timestamp}\n${body}`;
+}
 
 /**
  * Verify HMAC signature
- * @param payload - Raw request body as string
+ * @param canonicalMessage - Canonical message to sign
  * @param signature - HMAC signature from header
  * @param secret - HMAC secret (defaults to SHARED_HMAC_SECRET env var)
  * @returns true if signature is valid
  */
 export function verifyHMAC(
-  payload: string,
+  canonicalMessage: string,
   signature: string | null,
-  secret?: string
+  secret?: string | null
 ): boolean {
   const hmacSecret = secret || process.env[HMAC_SECRET_ENV];
-  
+
   if (!hmacSecret || !signature) {
     return false;
   }
@@ -36,7 +84,7 @@ export function verifyHMAC(
   try {
     const expectedSignature = crypto
       .createHmac("sha256", hmacSecret)
-      .update(payload, "utf8")
+      .update(canonicalMessage, "utf8")
       .digest("hex");
 
     // Use timing-safe comparison to prevent timing attacks
@@ -52,68 +100,127 @@ export function verifyHMAC(
 
 /**
  * Generate HMAC signature for outbound requests
- * @param payload - Request body as string
+ * @param message - Canonical message string
  * @param secret - HMAC secret (defaults to SHARED_HMAC_SECRET env var)
  * @returns HMAC signature as hex string
  */
 export function generateHMAC(
-  payload: string,
+  message: string,
   secret?: string
 ): string {
   const hmacSecret = secret || process.env[HMAC_SECRET_ENV];
-  
+
   if (!hmacSecret) {
     throw new Error("HMAC secret not configured");
   }
 
   return crypto
     .createHmac("sha256", hmacSecret)
-    .update(payload, "utf8")
+    .update(message, "utf8")
     .digest("hex");
 }
 
+type ValidationResult = {
+  valid: boolean;
+  error?: string;
+  code?: string;
+  body?: any;
+  rawBody?: string;
+  headers?: ValidatedHMACHeaders;
+};
+
 /**
  * HMAC Middleware - Validates HMAC signature on incoming requests
- * 
+ *
  * Usage in API route:
- * 
+ *
  * export async function POST(req: NextRequest) {
  *   const validation = await validateHMACRequest(req);
  *   if (!validation.valid) {
  *     return NextResponse.json({ error: validation.error }, { status: 401 });
  *   }
- *   
+ *
  *   const body = validation.body; // Already parsed JSON
  *   // ... rest of your handler
  * }
  */
 export async function validateHMACRequest(
   req: NextRequest
-): Promise<{
-  valid: boolean;
-  error?: string;
-  body?: any;
-  rawBody?: string;
-}> {
+): Promise<ValidationResult> {
   try {
-    // Get raw body for HMAC verification
     const rawBody = await req.text();
-    
-    // Get signature from header
+
     const signature = req.headers.get(HMAC_HEADER);
+    const keyId = req.headers.get(KEY_ID_HEADER);
+    const clientId = req.headers.get(CLIENT_ID_HEADER);
+    const timestamp = req.headers.get(TIMESTAMP_HEADER);
+    const idempotencyKey = req.headers.get(IDEMPOTENCY_HEADER);
+    const environmentHeader = req.headers.get(ENV_HEADER);
+    const environment = environmentHeader?.toLowerCase() === "sandbox" ? "sandbox" : "production";
 
     if (!signature) {
       return {
         valid: false,
         error: "Missing HMAC signature header",
+        code: "HMAC_SIGNATURE_MISSING",
+        headers: { clientId, timestamp, idempotencyKey, keyId, environment },
       };
     }
 
-    // Verify HMAC
-    if (!verifyHMAC(rawBody, signature)) {
+    if (!clientId) {
+      return {
+        valid: false,
+        error: "Missing client identifier header",
+        code: "CLIENT_ID_MISSING",
+        headers: { clientId, timestamp, idempotencyKey, keyId, environment },
+      };
+    }
+
+    if (!timestamp) {
+      return {
+        valid: false,
+        error: "Missing timestamp header",
+        code: "TIMESTAMP_MISSING",
+        headers: { clientId, timestamp, idempotencyKey, keyId, environment },
+      };
+    }
+
+    const timestampDate = new Date(timestamp);
+    if (Number.isNaN(timestampDate.getTime())) {
+      return {
+        valid: false,
+        error: "Invalid timestamp format",
+        code: "TIMESTAMP_INVALID",
+        headers: { clientId, timestamp, idempotencyKey, keyId, environment },
+      };
+    }
+
+    const now = Date.now();
+    const requestTime = timestampDate.getTime();
+    if (Math.abs(now - requestTime) > ALLOWED_TIMESTAMP_SKEW_MS) {
+      return {
+        valid: false,
+        error: "Request timestamp outside allowed window",
+        code: "TIMESTAMP_SKEW",
+        headers: { clientId, timestamp, idempotencyKey, keyId, environment },
+      };
+    }
+
+    const canonicalMessage = buildCanonicalMessage(
+      req.method,
+      req.nextUrl.pathname,
+      timestamp,
+      rawBody
+    );
+
+    const secret = getSecretForKeyId(keyId);
+
+    if (!verifyHMAC(canonicalMessage, signature, secret)) {
       return {
         valid: false,
         error: "Invalid HMAC signature",
+        code: "HMAC_VALIDATION_FAILED",
+        headers: { clientId, timestamp, idempotencyKey, keyId, environment },
       };
     }
 
@@ -123,7 +230,6 @@ export async function validateHMACRequest(
       try {
         body = JSON.parse(rawBody);
       } catch (e) {
-        // Not JSON, that's okay - raw body is still available
         body = rawBody;
       }
     }
@@ -132,79 +238,109 @@ export async function validateHMACRequest(
       valid: true,
       body,
       rawBody,
+      headers: { clientId, timestamp, idempotencyKey, keyId, environment },
     };
   } catch (error) {
     console.error("HMAC validation error:", error);
     return {
       valid: false,
       error: error instanceof Error ? error.message : "HMAC validation failed",
+      code: "HMAC_VALIDATION_FAILED",
     };
   }
 }
 
 /**
  * HMAC Middleware Wrapper - Higher-order function for API routes
- * 
- * Usage:
- * 
- * export const POST = withHMAC(async (req, body) => {
- *   // Your handler code here
- *   // body is already parsed and validated
- *   return NextResponse.json({ success: true });
- * });
  */
 export function withHMAC(
-  handler: (req: NextRequest, body: any, rawBody: string) => Promise<NextResponse>
+  handler: (
+    req: NextRequest,
+    body: any,
+    rawBody: string,
+    headers: ValidatedHMACHeaders
+  ) => Promise<NextResponse>
 ) {
   return async (req: NextRequest): Promise<NextResponse> => {
     const validation = await validateHMACRequest(req);
-    
+
     if (!validation.valid) {
       return NextResponse.json(
-        { error: validation.error || "HMAC validation failed" },
+        {
+          error: validation.error || "HMAC validation failed",
+          code: validation.code || "HMAC_VALIDATION_FAILED",
+        },
         { status: 401 }
       );
     }
 
-    return handler(req, validation.body, validation.rawBody || "");
+    return handler(
+      req,
+      validation.body,
+      validation.rawBody || "",
+      (validation.headers || {
+        clientId: null,
+        timestamp: null,
+        idempotencyKey: null,
+        keyId: null,
+        environment: "production",
+      }) as ValidatedHMACHeaders
+    );
   };
 }
 
 /**
  * Optional HMAC Middleware - Only validates if signature is provided
- * 
- * Useful for endpoints that accept both authenticated and unauthenticated requests
- * 
- * Usage:
- * 
- * export const POST = withOptionalHMAC(async (req, body, isVerified) => {
- *   if (isVerified) {
- *     // Trust external source
- *   } else {
- *     // Validate another way (e.g., Clerk auth)
- *   }
- * });
  */
 export function withOptionalHMAC(
   handler: (
     req: NextRequest,
     body: any,
     rawBody: string,
-    isVerified: boolean
+    isVerified: boolean,
+    headers: ValidatedHMACHeaders
   ) => Promise<NextResponse>
 ) {
   return async (req: NextRequest): Promise<NextResponse> => {
     const signature = req.headers.get(HMAC_HEADER);
+    const keyId = req.headers.get(KEY_ID_HEADER);
+    const clientId = req.headers.get(CLIENT_ID_HEADER);
+    const timestamp = req.headers.get(TIMESTAMP_HEADER);
+    const idempotencyKey = req.headers.get(IDEMPOTENCY_HEADER);
+    const environmentHeader = req.headers.get(ENV_HEADER);
+    const environment = environmentHeader?.toLowerCase() === "sandbox" ? "sandbox" : "production";
+
     const rawBody = await req.text();
-    
+
     let isVerified = false;
     let body: any = null;
+    let headers: ValidatedHMACHeaders = {
+      clientId,
+      timestamp,
+      idempotencyKey,
+      keyId,
+      environment,
+    };
 
     if (signature) {
-      isVerified = verifyHMAC(rawBody, signature);
+      if (!timestamp) {
+        return NextResponse.json(
+          { error: "Missing timestamp header", code: "TIMESTAMP_MISSING" },
+          { status: 401 }
+        );
+      }
+
+      const canonicalMessage = buildCanonicalMessage(
+        req.method,
+        req.nextUrl.pathname,
+        timestamp,
+        rawBody
+      );
+
+      isVerified = verifyHMAC(canonicalMessage, signature, getSecretForKeyId(keyId));
       if (!isVerified) {
         return NextResponse.json(
-          { error: "Invalid HMAC signature" },
+          { error: "Invalid HMAC signature", code: "HMAC_VALIDATION_FAILED" },
           { status: 401 }
         );
       }
@@ -219,7 +355,7 @@ export function withOptionalHMAC(
       }
     }
 
-    return handler(req, body, rawBody, isVerified);
+    return handler(req, body, rawBody, isVerified, headers);
   };
 }
 

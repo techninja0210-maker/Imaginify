@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 
 import { prisma } from "../database/prisma";
 import { handleError, requireGmailEmail } from "../utils";
@@ -249,48 +250,92 @@ export async function updateCredits(userId: string, creditFee: number, reason: s
         organizationId = user.organizationMembers[0].organization.id;
       }
 
+      if (idempotencyKey) {
+        const existingLedger = await tx.creditLedger.findUnique({
+          where: { idempotencyKey }
+        });
+
+        if (existingLedger) {
+          console.log(`[UPDATE_CREDITS] Skipping duplicate allocation for idempotencyKey=${idempotencyKey}`);
+          const existingUser = await tx.user.findUnique({
+            where: { clerkId: userId }
+          });
+          if (existingUser) {
+            return existingUser;
+          }
+        }
+      }
+
+      const currentVersion = user.creditBalanceVersion;
+      const newBalance = user.creditBalance + creditFee;
+
+      const updateResult = await tx.user.updateMany({
+        where: { clerkId: userId, creditBalanceVersion: currentVersion },
+        data: {
+          creditBalance: { increment: creditFee },
+          creditBalanceVersion: { increment: 1 }
+        }
+      });
+
+      if (updateResult.count === 0) {
+        throw new Error("BALANCE_VERSION_CONFLICT");
+      }
+
+      const updatedUser = await tx.user.findUnique({
+        where: { clerkId: userId }
+      });
+
+      if (!updatedUser) {
+        throw new Error("User not found after credit update");
+      }
+
       const ledgerData: any = {
         organizationId,
-        userId: user.id,
+        userId: updatedUser.id,
         type: creditFee > 0 ? 'allocation' : 'deduction',
         amount: creditFee,
         reason,
+        balanceAfter: updatedUser.creditBalance,
+        idempotencyKey: idempotencyKey || undefined,
+        metadata: {
+          previousBalance: user.creditBalance,
+          delta: creditFee,
+        }
       };
-      if (idempotencyKey) ledgerData.idempotencyKey = idempotencyKey;
-      await tx.creditLedger.create({ data: ledgerData });
 
-      // Update user's personal credit balance
-      const updatedUser = await tx.user.update({
-        where: { clerkId: userId },
-        data: { creditBalance: { increment: creditFee } }
-      });
-
-      // Verify the update actually happened
-      const verifyUser = await tx.user.findUnique({
-        where: { clerkId: userId },
-        select: { creditBalance: true }
-      });
-
-      if (!verifyUser || verifyUser.creditBalance !== (user.creditBalance + creditFee)) {
-        throw new Error(`Credit balance update verification failed. Expected: ${user.creditBalance + creditFee}, Got: ${verifyUser?.creditBalance || 'null'}`);
-      }
+      const ledgerEntry = await tx.creditLedger.create({ data: ledgerData });
 
       // Mirror to organization credit_balances for backwards-compat dashboards
       if (organizationId) {
         try {
-          const existing = await tx.creditBalance.findUnique({ where: { organizationId } });
+          const existing = await tx.creditBalance.findUnique({ 
+            where: { organizationId },
+            select: {
+              id: true,
+              organizationId: true,
+              balance: true,
+              version: true,
+            }
+          });
           if (existing) {
-            await tx.creditBalance.update({ 
-              where: { organizationId }, 
-              data: { balance: { increment: creditFee } } 
+            const orgUpdateResult = await tx.creditBalance.updateMany({
+              where: { organizationId, version: existing.version },
+              data: {
+                balance: { increment: creditFee },
+                version: { increment: 1 }
+              }
             });
+
+            if (orgUpdateResult.count === 0) {
+              throw new Error("ORG_BALANCE_VERSION_CONFLICT");
+            }
+
             console.log(`[UPDATE_CREDITS] Updated org balance: orgId=${organizationId}, increment=${creditFee}, newBalance=${existing.balance + creditFee}`);
           } else {
-            // Create org balance entry matching user's current balance
             await tx.creditBalance.create({ 
               data: { 
                 organizationId, 
-                balance: updatedUser.creditBalance, // Use the already-updated user balance
+                balance: updatedUser.creditBalance,
                 lowBalanceThreshold: user.lowBalanceThreshold || 10,
                 autoTopUpEnabled: false
               } 
@@ -299,8 +344,6 @@ export async function updateCredits(userId: string, creditFee: number, reason: s
           }
         } catch (orgError: any) {
           console.error(`[UPDATE_CREDITS] Failed to mirror to org balance:`, orgError);
-          // Don't fail the whole transaction if org mirror fails - user balance is primary
-          // But log it so we can debug
         }
       }
 
@@ -312,7 +355,7 @@ export async function updateCredits(userId: string, creditFee: number, reason: s
       revalidatePath('/billing');
       revalidatePath('/credits');
       
-      return updatedUser;
+      return { ...updatedUser, ledgerEntry };
     }, {
       maxWait: 10000, // Maximum time to wait for a transaction slot (10 seconds)
       timeout: 20000, // Maximum time for the transaction to complete (20 seconds)
@@ -343,7 +386,33 @@ export async function updateCredits(userId: string, creditFee: number, reason: s
 }
 
 // DEDUCT CREDITS (User-scoped version)
-export async function deductCredits(userId: string, amount: number, reason: string = "Video generation", idempotencyKey?: string) {
+type CreditBreakdownItem = {
+  platform: string;
+  action: string;
+  units?: number;
+  unit_type?: string;
+  unitType?: string;
+  unit_price?: number;
+  unitPrice?: number;
+  subtotal?: number;
+};
+
+type DeductCreditsOptions = {
+  metadata?: Record<string, any>;
+  breakdown?: CreditBreakdownItem[];
+  clientId?: string;
+  environment?: "production" | "sandbox";
+  externalJobId?: string;
+  status?: string;
+};
+
+export async function deductCredits(
+  userId: string,
+  amount: number,
+  reason: string = "Video generation",
+  idempotencyKey?: string,
+  options: DeductCreditsOptions = {}
+) {
   try {
     const result = await prisma.$transaction(async (tx) => {
       // Get user with current balance
@@ -360,9 +429,18 @@ export async function deductCredits(userId: string, amount: number, reason: stri
         throw new Error("User not found");
       }
 
-      // Check sufficient credits
-      if (user.creditBalance < amount) {
-        throw new Error(`Insufficient credits. Current: ${user.creditBalance}, Required: ${amount}`);
+      const environment = options.environment || "production";
+
+      // Sandbox mode returns simulated result
+      if (environment === "sandbox") {
+        return {
+          success: true,
+          sandbox: true,
+          updatedUser: user,
+          simulatedBalance: user.creditBalance - amount,
+          ledgerEntry: null,
+          idempotent: false,
+        };
       }
 
       // Check for duplicate idempotency key
@@ -372,37 +450,141 @@ export async function deductCredits(userId: string, amount: number, reason: stri
         });
         
         if (existingLedger) {
-          return { success: false, message: "Transaction already processed", ledgerId: existingLedger.id };
+          return {
+            success: true,
+            idempotent: true,
+            updatedUser: await tx.user.findUnique({ where: { clerkId: userId } }),
+            ledgerEntry: existingLedger
+          };
         }
       }
 
-      // Create ledger entry
-      const organizationId = user.organizationMembers[0]?.organization?.id;
-      const ledgerData: any = {
-        organizationId,
-        userId: user.id,
-        type: 'deduction',
-        amount: -amount,
-        reason,
-      };
-      if (idempotencyKey) ledgerData.idempotencyKey = idempotencyKey;
-      const ledgerEntry = await tx.creditLedger.create({ data: ledgerData });
-
-      // Update user's credit balance
-      const updatedUser = await tx.user.update({
+      // Refresh user after idempotency check (in case of changes)
+      const freshUser = await tx.user.findUnique({
         where: { clerkId: userId },
-        data: { creditBalance: { decrement: amount } }
+        select: {
+          id: true,
+          clerkId: true,
+          creditBalance: true,
+          creditBalanceVersion: true,
+        }
       });
 
+      if (!freshUser) {
+        throw new Error("User not found");
+      }
+
+      // Check sufficient credits
+      if (freshUser.creditBalance < amount) {
+        throw new Error(`Insufficient credits. Current: ${freshUser.creditBalance}, Required: ${amount}`);
+      }
+
+      const currentVersion = freshUser.creditBalanceVersion;
+      const newBalance = freshUser.creditBalance - amount;
+
+      const updateResult = await tx.user.updateMany({
+        where: { clerkId: userId, creditBalanceVersion: currentVersion },
+        data: {
+          creditBalance: { decrement: amount },
+          creditBalanceVersion: { increment: 1 }
+        }
+      });
+
+      if (updateResult.count === 0) {
+        const conflictError: any = new Error("Balance version conflict");
+        conflictError.code = "BALANCE_VERSION_CONFLICT";
+        throw conflictError;
+      }
+
+      const updatedUser = await tx.user.findUnique({
+        where: { clerkId: userId }
+      });
+
+      if (!updatedUser) {
+        throw new Error("User not found after deduction");
+      }
+
       // Mirror decrement to organization credit_balances
+      const organizationId = user.organizationMembers[0]?.organization?.id;
       if (organizationId) {
-        const existing = await tx.creditBalance.findUnique({ where: { organizationId } });
+        const existing = await tx.creditBalance.findUnique({ 
+          where: { organizationId },
+          select: {
+            id: true,
+            organizationId: true,
+            balance: true,
+            version: true,
+          }
+        });
         if (existing) {
-          await tx.creditBalance.update({ where: { organizationId }, data: { balance: { decrement: amount } } });
+          const orgUpdateResult = await tx.creditBalance.updateMany({
+            where: { organizationId, version: existing.version },
+            data: {
+              balance: { decrement: amount },
+              version: { increment: 1 }
+            }
+          });
+
+          if (orgUpdateResult.count === 0) {
+            const orgConflict: any = new Error("Organization balance version conflict");
+            orgConflict.code = "BALANCE_VERSION_CONFLICT";
+            throw orgConflict;
+          }
         }
       }
 
-      return { success: true, updatedUser, ledgerEntry };
+      const breakdown = options.breakdown?.map((item) => ({
+        platform: item.platform,
+        action: item.action,
+        units: item.units ?? item.unit_type,
+        unitType: item.unitType ?? item.unit_type,
+        unitPrice: item.unitPrice ?? item.unit_price,
+        subtotal: item.subtotal,
+      }));
+
+      const ledgerMetadataRaw = options.metadata && typeof options.metadata === "object"
+        ? {
+            ...options.metadata,
+            clientId: options.clientId,
+            externalJobId: options.externalJobId,
+          }
+        : {
+            clientId: options.clientId,
+            externalJobId: options.externalJobId,
+          };
+
+      const ledgerMetadata = Object.fromEntries(
+        Object.entries(ledgerMetadataRaw).filter(([_, value]) => value !== undefined && value !== null)
+      );
+
+      const metadataValue =
+        Object.keys(ledgerMetadata).length > 0
+          ? (ledgerMetadata as Prisma.InputJsonValue)
+          : undefined;
+
+      const breakdownValue = breakdown
+        ? (breakdown as Prisma.InputJsonValue)
+        : undefined;
+
+      const ledgerEntry = await tx.creditLedger.create({
+        data: {
+          organizationId,
+          userId: updatedUser.id,
+          type: 'deduction',
+          amount: -amount,
+          reason,
+          metadata: metadataValue,
+          idempotencyKey: idempotencyKey || undefined,
+          externalJobId: options.externalJobId || undefined,
+          clientId: options.clientId || undefined,
+          environment,
+          breakdown: breakdownValue,
+          balanceAfter: updatedUser.creditBalance,
+          status: options.status || "completed",
+        }
+      });
+
+      return { success: true, updatedUser, ledgerEntry, idempotent: false };
     });
 
     return JSON.parse(JSON.stringify(result));

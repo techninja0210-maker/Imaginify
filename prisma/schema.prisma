@@ -25,6 +25,7 @@ model User {
   lowBalanceThreshold Int                  @default(5)
   autoTopUpEnabled    Boolean              @default(false)
   autoTopUpAmountCredits Int?
+  creditBalanceVersion Int                  @default(0)
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   ledger              CreditLedger[]
@@ -78,6 +79,7 @@ model CreditBalance {
   lowBalanceThreshold Int          @default(10)
   autoTopUpEnabled    Boolean      @default(false)
   autoTopUpAmountCredits Int?
+  version             Int          @default(0)
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -95,12 +97,19 @@ model CreditLedger {
   reason         String
   metadata       Json?
   idempotencyKey String?      @unique
+  externalJobId  String?
+  clientId       String?
+  environment    String       @default("production")
+  breakdown      Json?
+  balanceAfter   Int?
+  status         String       @default("completed")
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User?        @relation(fields: [userId], references: [id])
 
   @@map("credit_ledger")
 }
+
 
 model PriceBookEntry {
   id                  String       @id @default(cuid())
