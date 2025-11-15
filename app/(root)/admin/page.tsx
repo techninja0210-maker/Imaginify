@@ -5,6 +5,7 @@ import { AdminTabs } from "@/components/admin/AdminTabs";
 import { UsersContent } from "@/components/admin/UsersContent";
 import { PriceBookContent } from "@/components/admin/PriceBookContent";
 import { FixMissingCreditsContent } from "@/components/admin/FixMissingCreditsContent";
+import { TrendingImportContent } from "@/components/admin/TrendingImportContent";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,8 @@ const AdminPage = async ({ searchParams }: { searchParams: { q?: string; tab?: s
         {activeTab === "price-book" && <PriceBookContent />}
 
         {activeTab === "credits" && <FixMissingCreditsContent />}
+
+        {activeTab === "trending" && <TrendingImportContent />}
       </div>
     </div>
   );

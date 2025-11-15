@@ -25,7 +25,7 @@ SHARED_HMAC_SECRET=your-secret-key-here
 The following endpoints require HMAC authentication:
 
 - `POST /api/jobs/callback` - Job status updates from external services
-- `POST /api/credits/deduct` - Credit deduction (optional HMAC)
+- `POST /api/credits/deductions` - Credit deduction (required HMAC)
 - `POST /api/credits/spend` - Credit spending (optional HMAC)
 
 ## Usage Examples

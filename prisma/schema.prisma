@@ -33,6 +33,7 @@ model User {
   jobs                Job[]
   organizationMembers OrganizationMember[]
   transactions        Transaction[]
+  trendingImports     TrendingImportLog[]
 
   @@map("users")
 }
@@ -185,4 +186,123 @@ model JobQuote {
   user           User         @relation(fields: [userId], references: [id])
 
   @@map("job_quotes")
+}
+
+model TrendingProduct {
+  id               String                @id @default(cuid())
+  tiktokProductId  String                @unique
+  name             String
+  tiktokProductUrl String
+  displayImageUrl  String
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  weekStats        ProductWeekStat[]
+  matches          ProductAmazonMatch[]
+  videos           TrendingVideo[]
+
+  @@map("products")
+}
+
+model WeeklyReport {
+  id            String             @id @default(cuid())
+  weekStartDate DateTime
+  weekEndDate   DateTime
+  label         String
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  stats         ProductWeekStat[]
+  importLogs    TrendingImportLog[]
+
+  @@unique([weekStartDate, weekEndDate])
+  @@map("weekly_reports")
+}
+
+model ProductWeekStat {
+  id                 String           @id @default(cuid())
+  reportId           String
+  productId          String
+  rankThisWeek       Int?
+  tiktokSales7d      Int?
+  tiktokDailySales   Int?
+  amazonSales7d      Int?
+  snapshotPriceCents Int?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  report             WeeklyReport     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  product            TrendingProduct  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, productId])
+  @@map("product_week_stats")
+}
+
+model AmazonProduct {
+  asin          String               @id
+  canonicalUrl  String
+  title         String?
+  brand         String?
+  mainImageUrl  String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  matches       ProductAmazonMatch[]
+
+  @@map("amazon_products")
+}
+
+model ProductAmazonMatch {
+  id         String          @id @default(cuid())
+  productId  String
+  asin       String
+  confidence Float           @default(0.5)
+  source     String          @default("kalodata")
+  chosen     Boolean         @default(false)
+  matchedAt  DateTime        @default(now())
+  method     String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  product    TrendingProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  amazon     AmazonProduct   @relation(fields: [asin], references: [asin], onDelete: Cascade)
+
+  @@unique([productId, asin])
+  @@map("product_amazon_matches")
+}
+
+model TrendingVideo {
+  id             String           @id @default(cuid())
+  url            String           @unique
+  productId      String
+  rankForProduct Int?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  product        TrendingProduct  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("videos")
+}
+
+model TrendingImportLog {
+  id            String             @id @default(cuid())
+  fileLabel     String
+  uploaderId    String?
+  status        ImportStatus       @default(PENDING)
+  rowsProcessed Int                @default(0)
+  rowsCreated   Int                @default(0)
+  rowsUpdated   Int                @default(0)
+  rowsSkipped   Int                @default(0)
+  rowsFlagged   Int                @default(0)
+  notes         Json?
+  startedAt     DateTime           @default(now())
+  completedAt   DateTime?
+  reportId      String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  report        WeeklyReport?      @relation(fields: [reportId], references: [id])
+  uploader      User?              @relation(fields: [uploaderId], references: [id])
+
+  @@map("import_logs")
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }

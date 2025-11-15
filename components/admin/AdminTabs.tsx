@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Users, DollarSign, Settings, RefreshCw } from "lucide-react";
+import { Users, DollarSign, RefreshCw, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AdminTabsProps {
@@ -27,6 +27,12 @@ const tabs = [
     label: "Credit Management",
     icon: RefreshCw,
     href: "/admin?tab=credits",
+  },
+  {
+    id: "trending",
+    label: "Trending Import",
+    icon: TrendingUp,
+    href: "/admin?tab=trending",
   },
 ];
 

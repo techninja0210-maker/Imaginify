@@ -15,7 +15,7 @@ Other developer can then call this API to deduct those credits from the user's b
 ## API Endpoint
 
 ```
-POST /api/credits/deduct-external
+POST /api/credits/deductions
 ```
 
 This is the endpoint Other developer will call after calculating credits.
@@ -124,7 +124,7 @@ const signature = crypto
   .digest('hex');
 
 // Step 4: Make the API call
-const response = await fetch('https://your-domain.com/api/credits/deduct-external', {
+const response = await fetch('https://your-domain.com/api/credits/deductions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -159,7 +159,7 @@ Here's how everything works together from start to finish:
    (This is where they determine: "Fal.ai 60-second video = 10 credits")
    ↓
 5. Other developer's backend calls this API:
-   POST /api/credits/deduct-external
+   POST /api/credits/deductions
    { userId, amount: 10, reason, idempotencyKey }
    ↓
 6. Our API deducts the credits from the user's account
@@ -180,7 +180,7 @@ Every deduction is recorded in our ledger system, so you can track exactly when 
 
 ## What Other Developer Needs
 
-1. **The API endpoint**: `POST /api/credits/deduct-external`
+1. **The API endpoint**: `POST /api/credits/deductions`
 2. **The HMAC secret**: `SHARED_HMAC_SECRET` (I'll provide this)
 3. **User identification**: Either `userId` (Clerk ID) or `userEmail`
 4. **Credit calculation**: Their credits database that maps AI platforms to credit costs
