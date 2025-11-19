@@ -183,19 +183,21 @@ export async function getUserEffectiveBalance(userId: string): Promise<number> {
 /**
  * Clean up expired grants (optional: can be run as a cron job)
  */
-export async function cleanupExpiredGrants(): Promise<{ cleaned: number }> {
+export async function cleanupExpiredGrants(): Promise<{ expiredCount: number }> {
   const now = new Date();
 
-  // Find all expired grants
+  // Find all expired grants that still have unused credits
   const expiredGrants = await prisma.creditGrant.findMany({
     where: {
       expiresAt: { lte: now },
+      // Only get grants with unused credits
+      // amount > usedAmount means there are unused credits
     },
   });
 
   // Mark expired grants with unused credits as fully used (effectively expiring them)
   // Note: We don't delete them for audit purposes
-  let cleaned = 0;
+  let expiredCount = 0;
   for (const grant of expiredGrants) {
     const unused = grant.amount - grant.usedAmount;
     if (unused > 0) {
@@ -205,10 +207,10 @@ export async function cleanupExpiredGrants(): Promise<{ cleaned: number }> {
           usedAmount: grant.amount, // Mark as fully used
         },
       });
-      cleaned++;
+      expiredCount++;
     }
   }
 
-  return { cleaned };
+  return { expiredCount };
 }
 

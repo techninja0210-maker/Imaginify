@@ -248,6 +248,8 @@ export async function POST(request: Request) {
   if (eventType === "customer.subscription.created" || eventType === "customer.subscription.updated") {
     const subscription = event.data.object as any;
     const customerId = subscription.customer as string;
+    const stripeSubscriptionId = subscription.id;
+    const status = subscription.status; // active, canceled, past_due, unpaid, trialing
     
     try {
       // Find user by Stripe customer ID
@@ -263,20 +265,72 @@ export async function POST(request: Request) {
           }
         }
       }
+      
       if (user) {
-        console.log(`Subscription ${eventType} for user ${user.clerkId}, customer ${customerId}`);
+        console.log(`[WEBHOOK] Subscription ${eventType} for user ${user.clerkId}, status: ${status}`);
         
-        // Update user with subscription info (you can add subscription fields to User model if needed)
-        await prisma.user.update({
-          where: { clerkId: user.clerkId },
-          data: { 
-            // Add any subscription-related fields here if you extend the User model
-            // For now, we just log the event
+        // Get price ID from subscription
+        const priceId = subscription.items?.data?.[0]?.price?.id as string | undefined;
+        
+        if (priceId) {
+          // Find or create subscription plan
+          const planResult = await findOrCreateSubscriptionPlan(priceId);
+          const plan = await prisma.subscriptionPlan.findUnique({
+            where: { id: planResult.id }
+          });
+
+          if (plan) {
+            // Map Stripe status to our enum
+            let subscriptionStatus: "ACTIVE" | "CANCELED" | "PAST_DUE" | "UNPAID" | "TRIALING" = "ACTIVE";
+            if (status === "canceled") subscriptionStatus = "CANCELED";
+            else if (status === "past_due") subscriptionStatus = "PAST_DUE";
+            else if (status === "unpaid") subscriptionStatus = "UNPAID";
+            else if (status === "trialing") subscriptionStatus = "TRIALING";
+            else if (status === "active") subscriptionStatus = "ACTIVE";
+
+            // Get subscription period dates
+            const currentPeriodStart = subscription.current_period_start
+              ? new Date(subscription.current_period_start * 1000)
+              : new Date();
+            const currentPeriodEnd = subscription.current_period_end
+              ? new Date(subscription.current_period_end * 1000)
+              : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default 30 days
+
+            // Update or create UserSubscription
+            const userSubscription = await prisma.userSubscription.upsert({
+              where: { stripeSubscriptionId },
+              update: {
+                planId: plan.id,
+                status: subscriptionStatus,
+                currentPeriodStart,
+                currentPeriodEnd,
+                cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+                canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
+              },
+              create: {
+                userId: user.id,
+                planId: plan.id,
+                stripeSubscriptionId,
+                status: subscriptionStatus,
+                currentPeriodStart,
+                currentPeriodEnd,
+                cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+                canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
+              },
+            });
+
+            console.log(`[WEBHOOK] UserSubscription ${eventType === "customer.subscription.created" ? "created" : "updated"}: ${userSubscription.id}, plan: ${plan.publicName}, status: ${subscriptionStatus}`);
+          } else {
+            console.error(`[WEBHOOK] Failed to find subscription plan for price ${priceId}`);
           }
-        });
+        } else {
+          console.warn(`[WEBHOOK] No price ID found in subscription ${stripeSubscriptionId}`);
+        }
+      } else {
+        console.warn(`[WEBHOOK] User not found for customer ${customerId}`);
       }
     } catch (error) {
-      console.error(`Error handling subscription ${eventType}:`, error);
+      console.error(`[WEBHOOK] Error handling subscription ${eventType}:`, error);
     }
     
     return NextResponse.json({ ok: true });
@@ -412,6 +466,38 @@ export async function POST(request: Request) {
       }
     }
 
+    return NextResponse.json({ ok: true });
+  }
+
+  // Handle subscription deletion
+  if (eventType === "customer.subscription.deleted") {
+    const subscription = event.data.object as any;
+    const stripeSubscriptionId = subscription.id;
+    
+    try {
+      const userSubscription = await prisma.userSubscription.findUnique({
+        where: { stripeSubscriptionId }
+      });
+
+      if (userSubscription) {
+        // Update status to CANCELED instead of deleting (preserve history)
+        await prisma.userSubscription.update({
+          where: { stripeSubscriptionId },
+          data: {
+            status: "CANCELED",
+            canceledAt: new Date(),
+            cancelAtPeriodEnd: false,
+          }
+        });
+
+        console.log(`[WEBHOOK] Subscription deleted: ${stripeSubscriptionId}, marked as CANCELED`);
+      } else {
+        console.warn(`[WEBHOOK] UserSubscription not found for deleted subscription ${stripeSubscriptionId}`);
+      }
+    } catch (error) {
+      console.error(`[WEBHOOK] Error handling subscription deletion:`, error);
+    }
+    
     return NextResponse.json({ ok: true });
   }
 
