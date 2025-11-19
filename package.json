@@ -11,7 +11,8 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
-    "db:seed": "ts-node --transpile-only prisma/seed.ts"
+    "db:seed": "ts-node --transpile-only prisma/seed.ts",
+    "migrate:plans": "ts-node --transpile-only scripts/migrate-existing-plans.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^4.29.6",

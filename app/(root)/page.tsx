@@ -303,8 +303,11 @@ const Home = async ({
                               <span className="text-xl">💰</span>
                             </div>
                             <div>
-                              <p className="text-xs text-gray-500 font-medium">Credits</p>
+                              <p className="text-xs text-gray-500 font-medium">Total Credits</p>
                               <p className="text-2xl font-bold text-gray-900">{credits.toLocaleString()}</p>
+                              <Link href="/credits" className="text-xs text-blue-600 hover:text-blue-700 mt-1 inline-block">
+                                View breakdown →
+                              </Link>
                             </div>
                           </div>
                         </div>

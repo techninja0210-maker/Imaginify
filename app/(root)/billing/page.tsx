@@ -7,6 +7,7 @@ import { notFound, redirect } from "next/navigation";
 import Stripe from "stripe";
 import Link from "next/link";
 import { CreditCard, Calendar, Coins, TrendingUp, Settings, ShoppingBag, FileText, Download, ArrowUp, ArrowDown } from "lucide-react";
+import { CreditBreakdown } from "@/components/shared/CreditBreakdown";
 
 // Force dynamic rendering to ensure fresh credit data
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,21 @@ const BillingPage = async () => {
   if (!user) notFound();
   let customerId = user.stripeCustomerId ?? null;
 
-  // Fetch active subscription (if any)
+  // Fetch active subscription from database (new system)
+  const userSubscription = await prisma.userSubscription.findFirst({
+    where: {
+      userId: user.id,
+      status: "ACTIVE",
+    },
+    include: {
+      plan: true,
+    },
+    orderBy: {
+      currentPeriodEnd: "desc",
+    },
+  });
+
+  // Fetch active subscription from Stripe (fallback)
   let currentPlan: string | null = null;
   let renewsOn: string | null = null;
   const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null as any;
@@ -39,7 +54,16 @@ const BillingPage = async () => {
     } catch {}
   }
 
-  if (customerId && stripe) {
+  // Use database subscription if available, otherwise fallback to Stripe
+  if (userSubscription) {
+    currentPlan = userSubscription.plan.publicName;
+    renewsOn = userSubscription.currentPeriodEnd.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  } else if (customerId && stripe) {
+    // Fallback to Stripe if no database subscription found
     try {
       const subs = await stripe.subscriptions.list({
         customer: customerId,
@@ -187,6 +211,32 @@ const BillingPage = async () => {
                 </div>
               )}
 
+              {/* Subscription Status */}
+              {userSubscription && (
+                <div className="pt-4 border-t border-gray-200 space-y-2">
+                  {userSubscription.cancelAtPeriodEnd && (
+                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-xs text-yellow-800 font-medium flex items-center gap-2">
+                        <span>⚠️</span>
+                        <span>Subscription will cancel on {renewsOn}</span>
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Credits per cycle:</span>
+                    <span className="font-semibold text-gray-900">
+                      {userSubscription.plan.creditsPerCycle.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Credit expiry:</span>
+                    <span className="font-semibold text-gray-900">
+                      {userSubscription.plan.creditExpiryDays} days
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Auto Top-up Status */}
               <div className="pt-4 border-t border-gray-200">
                 <div className="flex items-center justify-between">
@@ -245,55 +295,18 @@ const BillingPage = async () => {
             </div>
           </div>
 
-          {/* Credit Balance Card */}
+          {/* Credit Breakdown Card */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center">
                   <Coins className="w-5 h-5 text-white" />
                 </div>
-                <h2 className="text-lg font-semibold text-gray-900">Credit Balance</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Credit Breakdown</h2>
               </div>
             </div>
-            <div className="p-6 space-y-6">
-              {/* Current Balance */}
-              <div>
-                <p className="text-sm text-gray-500 font-medium mb-2">Available Credits</p>
-                <p className="text-4xl font-bold text-gray-900">{userBalance.toLocaleString()}</p>
-              </div>
-
-              {/* Balance Details */}
-              <div className="space-y-3 pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">User Balance</span>
-                  <span className="text-sm font-semibold text-gray-900">{userBalance.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Org Balance</span>
-                  <span className="text-sm font-semibold text-gray-900">{orgBalance.toLocaleString()}</span>
-                </div>
-                {isOutOfSync && (
-                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-xs text-yellow-800 font-medium flex items-center gap-2">
-                      <span>⚠️</span>
-                      <span>Balances are out of sync</span>
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Buy Credits Button */}
-              <div className="pt-4 border-t border-gray-200">
-                <Link href="/credits" className="block">
-                  <Button 
-                    type="button" 
-                    className="w-full py-2.5 bg-green-600 text-white hover:bg-green-700 font-medium rounded-lg transition-colors"
-                  >
-                    <ShoppingBag className="w-4 h-4 mr-2" />
-                    Buy More Credits
-                  </Button>
-                </Link>
-              </div>
+            <div className="p-6">
+              <CreditBreakdown />
             </div>
           </div>
         </div>

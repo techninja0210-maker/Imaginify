@@ -34,6 +34,9 @@ model User {
   organizationMembers OrganizationMember[]
   transactions        Transaction[]
   trendingImports     TrendingImportLog[]
+  creditGrants        CreditGrant[]
+  subscriptions       UserSubscription[]
+  topUpPurchases      TopUpPurchase[]
 
   @@map("users")
 }
@@ -305,4 +308,134 @@ enum ImportStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+enum CreditType {
+  SUBSCRIPTION
+  TOPUP
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  UNPAID
+  TRIALING
+}
+
+// CreditGrant: Tracks individual credit grants with expiry dates
+// This is the core model for credit expiry and type tracking
+model CreditGrant {
+  id              String      @id @default(cuid())
+  userId          String
+  type            CreditType  // SUBSCRIPTION or TOPUP
+  amount          Int         // Total credits granted
+  usedAmount      Int         @default(0) // Credits used from this grant
+  grantedAt       DateTime    @default(now())
+  expiresAt       DateTime    // When this grant expires
+  planId          String?     // Reference to SubscriptionPlan or TopUpPlan
+  subscriptionId String?     // If from subscription, link to UserSubscription
+  topUpPurchaseId String?     // If from top-up, link to TopUpPurchase
+  ledgerId        String?     // Link to the CreditLedger entry that created this grant
+  metadata        Json?       // Additional metadata (stripe invoice ID, etc.)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription   UserSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  topUpPurchase   TopUpPurchase? @relation(fields: [topUpPurchaseId], references: [id], onDelete: SetNull)
+
+  @@index([userId, expiresAt])
+  @@index([userId, type, expiresAt])
+  @@map("credit_grants")
+}
+
+// SubscriptionPlan: Defines subscription plans with versioning support
+model SubscriptionPlan {
+  id                    String              @id @default(cuid())
+  planFamily            String              // e.g., "basic", "pro", "enterprise"
+  version               Int                 @default(1) // Version number for this plan
+  internalId            String              @unique // e.g., "sub_basic_v1", "sub_basic_v2"
+  publicName            String              // e.g., "Starter Plan", "Pro Plan"
+  priceUsd              Float               // Monthly price in USD
+  creditsPerCycle       Int                 // Credits granted per billing cycle
+  creditExpiryDays      Int                 @default(30) // Days until credits expire (default 30 for subscriptions)
+  stripePriceId         String?             @unique // Stripe Price ID
+  stripeProductId       String?             // Stripe Product ID
+  isActiveForNewSignups Boolean             @default(true) // Can new users sign up for this?
+  isLegacyOnly          Boolean             @default(false) // Only existing subscribers can stay on this
+  isHidden              Boolean             @default(false) // Hide from UI (for testing/internal)
+  isDefaultForSignup     Boolean             @default(false) // Default plan for new signups
+  upgradeAllowedTo      String[]            @default([]) // Array of plan IDs user can upgrade to
+  downgradeAllowedTo    String[]            @default([]) // Array of plan IDs user can downgrade to
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  subscriptions         UserSubscription[]
+
+  @@unique([planFamily, version])
+  @@index([planFamily, isActiveForNewSignups])
+  @@map("subscription_plans")
+}
+
+// TopUpPlan: Defines one-time top-up credit packs
+model TopUpPlan {
+  id                String          @id @default(cuid())
+  internalId       String          @unique // e.g., "topup_5000_v1"
+  publicName        String          // e.g., "5,000 Credit Boost"
+  priceUsd          Float           // Price in USD
+  creditsGranted    Int             // Credits granted
+  creditExpiryDays   Int             @default(365) // Days until credits expire (default 365 for top-ups)
+  stripePriceId      String?         @unique // Stripe Price ID
+  stripeProductId   String?         // Stripe Product ID
+  canPurchaseWithoutSubscription Boolean @default(true) // Can non-subscribers buy this?
+  isActive           Boolean         @default(true)
+  isHidden           Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  purchases         TopUpPurchase[]
+
+  @@map("top_up_plans")
+}
+
+// UserSubscription: Tracks active user subscriptions
+model UserSubscription {
+  id                  String              @id @default(cuid())
+  userId              String
+  planId              String              // Reference to SubscriptionPlan
+  stripeSubscriptionId String             @unique // Stripe Subscription ID
+  status              SubscriptionStatus  @default(ACTIVE)
+  currentPeriodStart  DateTime            // Start of current billing period
+  currentPeriodEnd    DateTime            // End of current billing period (renewal date)
+  cancelAtPeriodEnd   Boolean             @default(false) // Will cancel at period end
+  canceledAt          DateTime?           // When subscription was canceled
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                SubscriptionPlan    @relation(fields: [planId], references: [id])
+  creditGrants        CreditGrant[]
+
+  @@index([userId, status])
+  @@index([stripeSubscriptionId])
+  @@map("user_subscriptions")
+}
+
+// TopUpPurchase: Tracks individual top-up purchases
+model TopUpPurchase {
+  id              String          @id @default(cuid())
+  userId          String
+  planId          String          // Reference to TopUpPlan
+  stripeSessionId String?         // Stripe Checkout Session ID
+  stripeInvoiceId String?         // Stripe Invoice ID
+  amount          Float           // Amount paid
+  creditsGranted  Int             // Credits granted
+  purchasedAt     DateTime        @default(now())
+  expiresAt       DateTime        // When credits expire (purchasedAt + creditExpiryDays)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan            TopUpPlan       @relation(fields: [planId], references: [id])
+  creditGrants    CreditGrant[]
+
+  @@index([userId, expiresAt])
+  @@index([stripeSessionId])
+  @@map("top_up_purchases")
 }

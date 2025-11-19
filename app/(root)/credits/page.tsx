@@ -5,6 +5,7 @@ import { getUserById } from "@/lib/actions/user.actions";
 import Checkout from "@/components/shared/Checkout";
 import { Button } from "@/components/ui/button";
 import { Check, X, Sparkles, Zap, Crown } from "lucide-react";
+import { CreditBreakdown } from "@/components/shared/CreditBreakdown";
 
 const Credits = async () => {
   const { userId } = auth();
@@ -44,10 +45,15 @@ const Credits = async () => {
               Choose a credit package that suits your needs
             </p>
             <p className="text-sm text-gray-500">
-              All credits are one-time purchases and never expire
+              Top-up credits expire after 12 months. Subscription credits expire at the end of each billing cycle.
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Credit Breakdown */}
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <CreditBreakdown />
       </div>
 
       {/* Credit Packages */}
@@ -180,9 +186,9 @@ const Credits = async () => {
                 <div className="w-12 h-12 mx-auto mb-3 rounded-lg bg-purple-100 flex items-center justify-center">
                   <Zap className="w-6 h-6 text-purple-600" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Never Expire</h3>
+                <h3 className="font-semibold text-gray-900 mb-2">Long Validity</h3>
                 <p className="text-sm text-gray-600">
-                  Your credits stay in your account until you use them
+                  Top-up credits are valid for 12 months from purchase
                 </p>
               </div>
               <div className="text-center">
@@ -209,7 +215,7 @@ const Credits = async () => {
                 Do credits expire?
               </h3>
               <p className="text-gray-600 text-sm">
-                No, credits never expire. You can use them whenever you need them.
+                Top-up credits expire after 12 months from purchase. Subscription credits expire at the end of each billing cycle (30 days). Credits are used in order: subscription credits first, then top-up credits (earliest expiring first).
               </p>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-6">

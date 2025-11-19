@@ -1,6 +1,8 @@
 /* eslint-disable camelcase */
 import { createTransaction } from "@/lib/actions/transaction.action";
 import { updateCredits, getUserOrganizationId } from "@/lib/actions/user.actions";
+import { grantCreditsWithExpiry } from "@/lib/actions/credit-grant-with-expiry";
+import { findOrCreateTopUpPlan, findOrCreateSubscriptionPlan } from "@/lib/services/stripe-plans";
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/database/prisma";
@@ -98,16 +100,77 @@ export async function POST(request: Request) {
           });
         }
 
-        const creditResult = await updateCredits(
-          transaction.buyerId, 
-          transaction.credits, 
-          `Top-up purchase ${transaction.stripeId}`, 
-          idemKey
-        );
-        
-        if (!creditResult) {
-          console.error(`[WEBHOOK] updateCredits returned null/undefined for session ${transaction.stripeId}`);
-          throw new Error('updateCredits returned null/undefined');
+        // NEW: Use grant system for top-up purchases
+        // Get session to find price ID (expand line_items)
+        const session = await stripe.checkout.sessions.retrieve(transaction.stripeId, {
+          expand: ['line_items']
+        });
+        const priceId = session.line_items?.data?.[0]?.price?.id as string | undefined;
+
+        if (!priceId) {
+          // Fallback to old method if no price ID
+          const creditResult = await updateCredits(
+            transaction.buyerId, 
+            transaction.credits, 
+            `Top-up purchase ${transaction.stripeId}`, 
+            idemKey
+          );
+          
+          if (!creditResult) {
+            console.error(`[WEBHOOK] updateCredits returned null/undefined for session ${transaction.stripeId}`);
+            throw new Error('updateCredits returned null/undefined');
+          }
+        } else {
+          // Find or create top-up plan
+          const planResult = await findOrCreateTopUpPlan(priceId);
+          const plan = await prisma.topUpPlan.findUnique({
+            where: { id: planResult.id }
+          });
+
+          if (!plan) {
+            throw new Error(`Failed to find or create top-up plan for price ${priceId}`);
+          }
+
+          // Create top-up purchase record
+          const user = await prisma.user.findUnique({
+            where: { clerkId: transaction.buyerId }
+          });
+
+          if (!user) {
+            throw new Error(`User not found: ${transaction.buyerId}`);
+          }
+
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + plan.creditExpiryDays);
+
+          const topUpPurchase = await prisma.topUpPurchase.create({
+            data: {
+              userId: user.id,
+              planId: plan.id,
+              stripeSessionId: transaction.stripeId,
+              amount: transaction.amount,
+              creditsGranted: transaction.credits,
+              expiresAt,
+            }
+          });
+
+          // Grant credits with expiry
+          await grantCreditsWithExpiry({
+            userId: transaction.buyerId,
+            type: "TOPUP",
+            amount: transaction.credits,
+            expiresAt,
+            reason: `Top-up purchase ${transaction.stripeId}`,
+            planId: plan.id,
+            topUpPurchaseId: topUpPurchase.id,
+            idempotencyKey: idemKey,
+            metadata: {
+              stripeSessionId: transaction.stripeId,
+              planName: plan.publicName,
+            }
+          });
+
+          console.log(`[WEBHOOK] Top-up credits granted with expiry: ${transaction.credits} credits, expires ${expiresAt.toISOString()}`);
         }
         
         // Verify credits were actually added
@@ -254,7 +317,99 @@ export async function POST(request: Request) {
     }
 
     if (clerkUserId && typeof clerkUserId === 'string' && planCredits > 0) {
-      await updateCredits(clerkUserId, planCredits, `Subscription credit grant ${subscriptionId}`, `stripe:invoice:${invoice.id}`);
+      // NEW: Use grant system for subscription renewals
+      const priceId = invoice.lines?.data?.[0]?.price?.id as string | undefined;
+
+      if (priceId) {
+        try {
+          // Find or create subscription plan
+          const planResult = await findOrCreateSubscriptionPlan(priceId);
+          const plan = await prisma.subscriptionPlan.findUnique({
+            where: { id: planResult.id }
+          });
+
+          if (!plan) {
+            throw new Error(`Failed to find or create subscription plan for price ${priceId}`);
+          }
+
+          // Get or create user subscription
+          const user = await prisma.user.findUnique({
+            where: { clerkId: clerkUserId }
+          });
+
+          if (!user) {
+            throw new Error(`User not found: ${clerkUserId}`);
+          }
+
+          let userSubscription = await prisma.userSubscription.findUnique({
+            where: { stripeSubscriptionId: subscriptionId }
+          });
+
+          if (!userSubscription) {
+            // Create new subscription record
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+            userSubscription = await prisma.userSubscription.create({
+              data: {
+                userId: user.id,
+                planId: plan.id,
+                stripeSubscriptionId: subscriptionId,
+                status: subscription.status === "active" ? "ACTIVE" : 
+                        subscription.status === "canceled" ? "CANCELED" :
+                        subscription.status === "past_due" ? "PAST_DUE" :
+                        subscription.status === "unpaid" ? "UNPAID" : "ACTIVE",
+                currentPeriodStart: new Date(subscription.current_period_start * 1000),
+                currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+                cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+              }
+            });
+          } else {
+            // Update existing subscription
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+            userSubscription = await prisma.userSubscription.update({
+              where: { id: userSubscription.id },
+              data: {
+                status: subscription.status === "active" ? "ACTIVE" : 
+                        subscription.status === "canceled" ? "CANCELED" :
+                        subscription.status === "past_due" ? "PAST_DUE" :
+                        subscription.status === "unpaid" ? "UNPAID" : "ACTIVE",
+                currentPeriodStart: new Date(subscription.current_period_start * 1000),
+                currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+                cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+              }
+            });
+          }
+
+          // Grant credits with 30-day expiry (subscription cycle)
+          const expiresAt = new Date(userSubscription.currentPeriodEnd);
+          expiresAt.setDate(expiresAt.getDate() + plan.creditExpiryDays);
+
+          await grantCreditsWithExpiry({
+            userId: clerkUserId,
+            type: "SUBSCRIPTION",
+            amount: planCredits,
+            expiresAt,
+            reason: `Subscription credit grant ${subscriptionId}`,
+            planId: plan.id,
+            subscriptionId: userSubscription.id,
+            idempotencyKey: `stripe:invoice:${invoice.id}`,
+            metadata: {
+              stripeInvoiceId: invoice.id,
+              stripeSubscriptionId: subscriptionId,
+              planName: plan.publicName,
+              periodEnd: userSubscription.currentPeriodEnd.toISOString(),
+            }
+          });
+
+          console.log(`[WEBHOOK] Subscription credits granted: ${planCredits} credits, expires ${expiresAt.toISOString()}`);
+        } catch (error: any) {
+          console.error(`[WEBHOOK] Failed to grant subscription credits with expiry, falling back to old method:`, error);
+          // Fallback to old method
+          await updateCredits(clerkUserId, planCredits, `Subscription credit grant ${subscriptionId}`, `stripe:invoice:${invoice.id}`);
+        }
+      } else {
+        // Fallback to old method if no price ID
+        await updateCredits(clerkUserId, planCredits, `Subscription credit grant ${subscriptionId}`, `stripe:invoice:${invoice.id}`);
+      }
     }
 
     return NextResponse.json({ ok: true });

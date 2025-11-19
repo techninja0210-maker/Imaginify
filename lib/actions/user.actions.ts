@@ -474,11 +474,67 @@ export async function deductCredits(
         throw new Error("User not found");
       }
 
-      // Check sufficient credits
-      if (freshUser.creditBalance < amount) {
-        throw new Error(`Insufficient credits. Current: ${freshUser.creditBalance}, Required: ${amount}`);
+      // NEW: Use credit grants system for deduction
+      // Get active grants and check availability
+      const now = new Date();
+      const activeGrants = await tx.creditGrant.findMany({
+        where: {
+          userId: freshUser.id,
+          expiresAt: { gt: now },
+        },
+        orderBy: [
+          { type: "asc" }, // SUBSCRIPTION first
+          { expiresAt: "asc" }, // Earliest expiring first
+        ],
+      });
+
+      // Calculate total available credits
+      let totalAvailable = 0;
+      for (const grant of activeGrants) {
+        const available = grant.amount - grant.usedAmount;
+        if (available > 0) {
+          totalAvailable += available;
+        }
       }
 
+      // Check sufficient credits
+      if (totalAvailable < amount) {
+        throw new Error(`Insufficient credits. Available: ${totalAvailable}, Required: ${amount}`);
+      }
+
+      // Deduct from grants in priority order
+      let remaining = amount;
+      const grantDeductions: Array<{ grantId: string; amount: number }> = [];
+
+      for (const grant of activeGrants) {
+        if (remaining <= 0) break;
+
+        const available = grant.amount - grant.usedAmount;
+        if (available <= 0) continue; // Skip exhausted grants
+
+        const toDeduct = Math.min(remaining, available);
+
+        // Update grant
+        await tx.creditGrant.update({
+          where: { id: grant.id },
+          data: {
+            usedAmount: { increment: toDeduct },
+          },
+        });
+
+        grantDeductions.push({
+          grantId: grant.id,
+          amount: toDeduct,
+        });
+
+        remaining -= toDeduct;
+      }
+
+      if (remaining > 0) {
+        throw new Error(`Failed to deduct all credits. Remaining: ${remaining}`);
+      }
+
+      // Update user balance (for backward compatibility and display)
       const currentVersion = freshUser.creditBalanceVersion;
       const newBalance = freshUser.creditBalance - amount;
 
@@ -566,6 +622,17 @@ export async function deductCredits(
         ? (breakdown as Prisma.InputJsonValue)
         : undefined;
 
+      // Include grant deduction details in metadata
+      const enhancedMetadata = {
+        ...(ledgerMetadata as Record<string, any>),
+        grantDeductions: grantDeductions, // Track which grants were used
+      };
+
+      const enhancedMetadataValue =
+        Object.keys(enhancedMetadata).length > 0
+          ? (enhancedMetadata as Prisma.InputJsonValue)
+          : undefined;
+
       const ledgerEntry = await tx.creditLedger.create({
         data: {
           organizationId,
@@ -573,7 +640,7 @@ export async function deductCredits(
           type: 'deduction',
           amount: -amount,
           reason,
-          metadata: metadataValue,
+          metadata: enhancedMetadataValue,
           idempotencyKey: idempotencyKey || undefined,
           externalJobId: options.externalJobId || undefined,
           clientId: options.clientId || undefined,
@@ -584,7 +651,7 @@ export async function deductCredits(
         }
       });
 
-      return { success: true, updatedUser, ledgerEntry, idempotent: false };
+      return { success: true, updatedUser, ledgerEntry, idempotent: false, grantDeductions };
     });
 
     return JSON.parse(JSON.stringify(result));

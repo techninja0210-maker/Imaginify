@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Users, DollarSign, RefreshCw, TrendingUp } from "lucide-react";
+import { Users, DollarSign, RefreshCw, TrendingUp, CreditCard, ShoppingCart } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AdminTabsProps {
@@ -21,6 +21,18 @@ const tabs = [
     label: "Price Book",
     icon: DollarSign,
     href: "/admin?tab=price-book",
+  },
+  {
+    id: "subscription-plans",
+    label: "Subscription Plans",
+    icon: CreditCard,
+    href: "/admin/subscription-plans",
+  },
+  {
+    id: "top-up-plans",
+    label: "Top-Up Plans",
+    icon: ShoppingCart,
+    href: "/admin/top-up-plans",
   },
   {
     id: "credits",
