@@ -12,7 +12,9 @@
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
-    "migrate:plans": "ts-node --transpile-only scripts/migrate-existing-plans.ts"
+    "migrate:plans": "ts-node --transpile-only scripts/migrate-existing-plans.ts",
+    "test:deduction": "ts-node --transpile-only scripts/test-credit-deduction.ts",
+    "test:create-credits": "ts-node --transpile-only scripts/create-test-credits.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^4.29.6",

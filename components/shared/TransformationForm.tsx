@@ -34,6 +34,7 @@ import { getCldImageUrl } from "next-cloudinary"
 import { addJob, updateJob } from "@/lib/actions/job.actions"
 import { useRouter } from "next/navigation"
 import { InsufficientCreditsModal } from "./InsufficientCreditsModal"
+import { useToast } from "@/components/ui/use-toast"
  
 export const formSchema = z.object({
   title: z.string(),
@@ -52,6 +53,7 @@ const TransformationForm = ({ action, data = null, userId, organizationId, type,
   const [transformationConfig, setTransformationConfig] = useState(config)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
+  const { toast } = useToast()
 
   const initialValues = data && action === 'Update' ? {
     title: data?.title,
@@ -116,8 +118,34 @@ const TransformationForm = ({ action, data = null, userId, organizationId, type,
             setImage(data)
             router.push(`/transformations/${newJob.id}`)
           }
-        } catch (error) {
-          console.log(error);
+        } catch (error: any) {
+          console.error("Job creation error:", error);
+          const errorMessage = error?.message || "Failed to create transformation";
+          
+          // Check if it's an insufficient credits error
+          if (errorMessage.includes("Insufficient credits") || errorMessage.includes("insufficient")) {
+            toast({
+              title: "Insufficient Credits",
+              description: errorMessage.includes("Please top up") 
+                ? errorMessage 
+                : `${errorMessage}. Please top up or upgrade your plan to continue.`,
+              variant: "destructive",
+              action: (
+                <button
+                  onClick={() => router.push("/credits")}
+                  className="text-sm font-semibold underline"
+                >
+                  Buy Credits
+                </button>
+              ),
+            });
+          } else {
+            toast({
+              title: "Error",
+              description: errorMessage,
+              variant: "destructive",
+            });
+          }
         }
       }
 
@@ -137,8 +165,34 @@ const TransformationForm = ({ action, data = null, userId, organizationId, type,
           if(updatedJob) {
             router.push(`/transformations/${updatedJob.id}`)
           }
-        } catch (error) {
-          console.log(error);
+        } catch (error: any) {
+          console.error("Job creation error:", error);
+          const errorMessage = error?.message || "Failed to create transformation";
+          
+          // Check if it's an insufficient credits error
+          if (errorMessage.includes("Insufficient credits") || errorMessage.includes("insufficient")) {
+            toast({
+              title: "Insufficient Credits",
+              description: errorMessage.includes("Please top up") 
+                ? errorMessage 
+                : `${errorMessage}. Please top up or upgrade your plan to continue.`,
+              variant: "destructive",
+              action: (
+                <button
+                  onClick={() => router.push("/credits")}
+                  className="text-sm font-semibold underline"
+                >
+                  Buy Credits
+                </button>
+              ),
+            });
+          } else {
+            toast({
+              title: "Error",
+              description: errorMessage,
+              variant: "destructive",
+            });
+          }
         }
       }
     }

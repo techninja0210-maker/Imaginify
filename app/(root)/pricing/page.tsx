@@ -2,60 +2,108 @@ import Header from "@/components/shared/Header";
 import SubscribeButton from "@/components/shared/SubscribeButton";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
-
-const plans = [
-  {
-    name: "Starter",
-    price: "$10",
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER,
-    description: "Perfect for getting started",
-    features: [
-      "100 credits per month",
-      "Basic AI transformations",
-      "Email support",
-      "Access to core features",
-      "Community forum access",
-    ],
-    credits: 100,
-    popular: false,
-  },
-  {
-    name: "Pro",
-    price: "$30",
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO,
-    description: "For growing teams and professionals",
-    features: [
-      "500 credits per month",
-      "All AI transformations",
-      "Priority email support",
-      "Advanced features",
-      "Early access to new tools",
-      "Analytics dashboard",
-    ],
-    credits: 500,
-    popular: true,
-  },
-  {
-    name: "Business",
-    price: "$60",
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SCALE,
-    description: "For businesses at scale",
-    features: [
-      "1000 credits per month",
-      "All AI transformations",
-      "Priority support (24/7)",
-      "Advanced features",
-      "Early access to new tools",
-      "Analytics dashboard",
-      "API access",
-      "Custom integrations",
-    ],
-    credits: 1000,
-    popular: false,
-  },
-];
+import { prisma } from "@/lib/database/prisma";
 
 const PricingPage = async () => {
+  // Fetch active subscription plans from database
+  // Only show plans that are:
+  // - Active for new signups (isActiveForNewSignups = true)
+  // - Not legacy-only (isLegacyOnly = false)
+  // - Not hidden (isHidden = false)
+  const dbPlans = await prisma.subscriptionPlan.findMany({
+    where: {
+      isActiveForNewSignups: true,
+      isLegacyOnly: false,
+      isHidden: false,
+    },
+    orderBy: [
+      { priceUsd: "asc" }, // Sort by price ascending
+    ],
+  });
+
+  // Transform database plans to UI format
+  // If no plans in DB, fallback to hardcoded plans
+  const plans = dbPlans.length > 0
+    ? dbPlans.map((plan, index) => ({
+        id: plan.id,
+        internalId: plan.internalId,
+        name: plan.publicName,
+        price: `$${plan.priceUsd}`,
+        priceId: plan.stripePriceId || null,
+        description: `${plan.planFamily} plan with ${plan.creditsPerCycle.toLocaleString()} credits per month`,
+        features: [
+          `${plan.creditsPerCycle.toLocaleString()} credits per month`,
+          "All AI transformations",
+          "Email support",
+          "Access to core features",
+          plan.creditsPerCycle >= 500 ? "Priority support" : "Standard support",
+          plan.creditsPerCycle >= 1000 ? "API access" : null,
+        ].filter(Boolean) as string[],
+        credits: plan.creditsPerCycle,
+        popular: index === 1, // Middle plan is popular
+        isDefault: plan.isDefaultForSignup,
+      }))
+    : [
+        // Fallback to hardcoded plans if database is empty
+        {
+          id: "fallback-starter",
+          internalId: "sub_starter_v1",
+          name: "Starter",
+          price: "$10",
+          priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER,
+          description: "Perfect for getting started",
+          features: [
+            "100 credits per month",
+            "Basic AI transformations",
+            "Email support",
+            "Access to core features",
+            "Community forum access",
+          ],
+          credits: 100,
+          popular: false,
+          isDefault: false,
+        },
+        {
+          id: "fallback-pro",
+          internalId: "sub_pro_v1",
+          name: "Pro",
+          price: "$30",
+          priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO,
+          description: "For growing teams and professionals",
+          features: [
+            "500 credits per month",
+            "All AI transformations",
+            "Priority email support",
+            "Advanced features",
+            "Early access to new tools",
+            "Analytics dashboard",
+          ],
+          credits: 500,
+          popular: true,
+          isDefault: false,
+        },
+        {
+          id: "fallback-business",
+          internalId: "sub_business_v1",
+          name: "Business",
+          price: "$60",
+          priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SCALE,
+          description: "For businesses at scale",
+          features: [
+            "1000 credits per month",
+            "All AI transformations",
+            "Priority support (24/7)",
+            "Advanced features",
+            "Early access to new tools",
+            "Analytics dashboard",
+            "API access",
+            "Custom integrations",
+          ],
+          credits: 1000,
+          popular: false,
+          isDefault: false,
+        },
+      ];
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       {/* Header */}

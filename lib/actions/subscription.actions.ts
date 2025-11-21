@@ -12,6 +12,20 @@ export async function startSubscriptionCheckout(
   if (!userId) redirect("/sign-in");
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  const prisma = (await import('@/lib/database/prisma')).prisma;
+
+  // Verify plans are available for new signups (not legacy-only)
+  for (const item of lineItems) {
+    const plan = await prisma.subscriptionPlan.findUnique({
+      where: { stripePriceId: item.priceId },
+    });
+
+    if (plan) {
+      if (plan.isLegacyOnly || !plan.isActiveForNewSignups || plan.isHidden) {
+        throw new Error(`Plan "${plan.publicName}" is not available for new signups.`);
+      }
+    }
+  }
 
   const metadata: Record<string, string> = {
     clerkUserId: userId,
@@ -122,24 +136,78 @@ export async function openCustomerPortalWithReturnUrl(customerId: string, return
   redirect(portal.url);
 }
 
-export async function changeSubscription(priceId: string) {
+export async function changeSubscriptionPlan(targetPlanInternalId: string) {
   const { userId } = auth();
   if (!userId) redirect("/sign-in");
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
   const prisma = (await import('@/lib/database/prisma')).prisma;
 
-  // Get user
-  const user = await prisma.user.findUnique({
-    where: { clerkId: userId },
-    select: { stripeCustomerId: true },
+  // Get target plan
+  const targetPlan = await prisma.subscriptionPlan.findUnique({
+    where: { internalId: targetPlanInternalId },
   });
 
-  if (!user || !user.stripeCustomerId) {
-    throw new Error("No Stripe customer found. Please link your billing account first.");
+  if (!targetPlan) {
+    throw new Error("Subscription plan not found.");
   }
 
-  // Get active subscription
+  if (!targetPlan.stripePriceId) {
+    throw new Error("This plan is not ready for checkout. Please contact support.");
+  }
+
+  // Get user (need internal ID + Stripe customer)
+  const user = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    select: { id: true, stripeCustomerId: true },
+  });
+
+  if (!user) {
+    redirect("/sign-in");
+  }
+
+  // Find active subscription (if any)
+  const activeSubscription = user.stripeCustomerId
+    ? await prisma.userSubscription.findFirst({
+        where: {
+          userId: user.id,
+          status: {
+            in: ["ACTIVE", "TRIALING", "PAST_DUE", "UNPAID"],
+          },
+        },
+        include: { plan: true },
+      })
+    : null;
+
+  // No active subscription → start checkout (if plan is available for new signups)
+  if (!activeSubscription) {
+    if (targetPlan.isLegacyOnly || !targetPlan.isActiveForNewSignups) {
+      throw new Error("This plan is not available for new signups.");
+    }
+
+    return startSubscriptionCheckout([{ priceId: targetPlan.stripePriceId, quantity: 1 }]);
+  }
+
+  // Already on desired plan
+  if (activeSubscription.plan.internalId === targetPlan.internalId) {
+    redirect("/billing?message=subscription-unchanged");
+  }
+
+  // Ensure this transition is allowed
+  const allowedUpgrades = new Set(activeSubscription.plan.upgradeAllowedTo || []);
+  const allowedDowngrades = new Set(activeSubscription.plan.downgradeAllowedTo || []);
+  const isAllowed =
+    allowedUpgrades.has(targetPlan.internalId) || allowedDowngrades.has(targetPlan.internalId);
+
+  if (!isAllowed) {
+    throw new Error("You cannot switch to this plan from your current plan. Please contact support.");
+  }
+
+  if (!user.stripeCustomerId) {
+    throw new Error("Missing Stripe customer record. Please contact support.");
+  }
+
+  // Get active Stripe subscription
   const subscriptions = await stripe.subscriptions.list({
     customer: user.stripeCustomerId,
     status: "active",
@@ -147,22 +215,20 @@ export async function changeSubscription(priceId: string) {
   });
 
   if (subscriptions.data.length === 0) {
-    // No active subscription, create new one
-    return startSubscriptionCheckout([{ priceId, quantity: 1 }]);
+    return startSubscriptionCheckout([{ priceId: targetPlan.stripePriceId, quantity: 1 }]);
   }
 
   const subscription = subscriptions.data[0];
   const subscriptionItem = subscription.items.data[0];
 
-  // Update subscription to new price
   await stripe.subscriptions.update(subscription.id, {
     items: [
       {
         id: subscriptionItem.id,
-        price: priceId,
+        price: targetPlan.stripePriceId,
       },
     ],
-    proration_behavior: "always_invoice", // Prorate immediately
+    proration_behavior: "always_invoice",
     metadata: {
       clerkUserId: userId,
     },

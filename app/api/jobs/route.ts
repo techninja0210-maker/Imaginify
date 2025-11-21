@@ -65,9 +65,30 @@ export async function POST(req: Request) {
         throw new Error('Quote has expired');
       }
 
-      // Check user has enough credits
-      if (user.creditBalance < quote.totalCredits) {
-        throw new Error(`Insufficient credits. Required: ${quote.totalCredits}, Available: ${user.creditBalance}`);
+      // Check user has enough credits using the new grant system
+      const now = new Date();
+      const activeGrants = await tx.creditGrant.findMany({
+        where: {
+          userId: user.id,
+          expiresAt: { gt: now },
+        },
+        orderBy: [
+          { type: "asc" }, // SUBSCRIPTION first
+          { expiresAt: "asc" }, // Earliest expiring first
+        ],
+      });
+
+      // Calculate total available credits
+      let totalAvailable = 0;
+      for (const grant of activeGrants) {
+        const available = grant.amount - grant.usedAmount;
+        if (available > 0) {
+          totalAvailable += available;
+        }
+      }
+
+      if (totalAvailable < quote.totalCredits) {
+        throw new Error(`Insufficient credits. Available: ${totalAvailable}, Required: ${quote.totalCredits}. Please top up or upgrade your plan.`);
       }
 
       // Create job
@@ -87,7 +108,51 @@ export async function POST(req: Request) {
         }
       });
 
-      // Deduct credits directly in transaction (can't call deductCredits which creates its own transaction)
+      // Deduct from grants in priority order (subscription first, then top-ups)
+      let remaining = quote.totalCredits;
+      const grantDeductions: Array<{ grantId: string; amount: number }> = [];
+
+      // Re-fetch grants within transaction to ensure consistency
+      const grantsInTx = await tx.creditGrant.findMany({
+        where: {
+          userId: user.id,
+          expiresAt: { gt: now },
+        },
+        orderBy: [
+          { type: "asc" },
+          { expiresAt: "asc" },
+        ],
+      });
+
+      for (const grant of grantsInTx) {
+        if (remaining <= 0) break;
+
+        const available = grant.amount - grant.usedAmount;
+        if (available <= 0) continue; // Skip exhausted grants
+
+        const toDeduct = Math.min(remaining, available);
+
+        // Update grant
+        await tx.creditGrant.update({
+          where: { id: grant.id },
+          data: {
+            usedAmount: { increment: toDeduct },
+          },
+        });
+
+        grantDeductions.push({
+          grantId: grant.id,
+          amount: toDeduct,
+        });
+
+        remaining -= toDeduct;
+      }
+
+      if (remaining > 0) {
+        throw new Error(`Failed to deduct all credits. Remaining: ${remaining}`);
+      }
+
+      // Create ledger entry
       const idemKey = idempotencyKey || `job:${job.id}:${Date.now()}`;
       
       // Check for duplicate idempotency key
@@ -99,7 +164,6 @@ export async function POST(req: Request) {
         throw new Error('Job already created (idempotency check)');
       }
 
-      // Create ledger entry
       await tx.creditLedger.create({
         data: {
           organizationId: quote.organizationId,
@@ -108,24 +172,34 @@ export async function POST(req: Request) {
           type: 'deduction',
           amount: -quote.totalCredits,
           reason: `Job creation: ${job.id}`,
-          idempotencyKey: idemKey
+          idempotencyKey: idemKey,
+          metadata: {
+            grantDeductions,
+            workflowType: quote.workflowType,
+          },
         }
       });
 
-      // Update user balance (user-scoped)
+      // Update user balance (for backward compatibility)
       await tx.user.update({
         where: { id: user.id },
-        data: { creditBalance: { decrement: quote.totalCredits } }
+        data: { 
+          creditBalance: { decrement: quote.totalCredits },
+          creditBalanceVersion: { increment: 1 },
+        }
       });
 
-      // Mirror to org balance
+      // Mirror to org balance (for backward compatibility)
       const orgCredits = await tx.creditBalance.findUnique({
         where: { organizationId: quote.organizationId }
       });
       if (orgCredits) {
         await tx.creditBalance.update({
           where: { organizationId: quote.organizationId },
-          data: { balance: { decrement: quote.totalCredits } }
+          data: { 
+            balance: { decrement: quote.totalCredits },
+            version: { increment: 1 },
+          }
         });
       }
 

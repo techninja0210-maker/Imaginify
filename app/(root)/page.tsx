@@ -8,7 +8,7 @@ import Link from "next/link"
 import { prisma } from "@/lib/database/prisma"
 import Stripe from "stripe"
 import dynamicImport from "next/dynamic"
-import { updateCredits } from "@/lib/actions/user.actions"
+// Removed updateCredits import - webhook handles credit grants with new grant system
 import { revalidatePath } from "next/cache"
 
 // Dynamically import client components - must be client-side only
@@ -98,28 +98,12 @@ const Home = async ({
               console.log(`[HOME PAGE] User found, current balance: ${userExists.creditBalance}, granting ${credits} credits`);
               
               try {
-                // Grant credits directly
-                const result = await updateCredits(
-                  userId,
-                  credits,
-                  `Checkout confirmation ${sessionId}`,
-                  idemKey
-                );
-                
-                if (result) {
-                  creditsGranted = credits;
-                  showSuccessMessage = true;
-                  const newBalance = (result as any)?.creditBalance || userExists.creditBalance + credits;
-                  console.log(`[HOME PAGE] ✅ Credits granted successfully: ${credits} credits, new balance: ${newBalance}`);
-                  
-                  // Force revalidation of all pages to show updated credits
-                  revalidatePath('/');
-                  revalidatePath('/profile');
-                  revalidatePath('/billing');
-                  revalidatePath('/credits');
-                } else {
-                  console.error(`[HOME PAGE] ❌ updateCredits returned null/undefined`);
-                }
+                // Use the new credit grant system instead of updateCredits for top-ups
+                // The webhook handler will handle this properly with grant system
+                // For now, just log and let webhook handle it to avoid duplicate grants
+                console.log(`[HOME PAGE] ⚠️ Skipping direct credit grant - webhook will handle with grant system`);
+                // The webhook at /api/webhooks/stripe will handle credit grants properly
+                // using the new grant system with expiry tracking
               } catch (grantError: any) {
                 console.error(`[HOME PAGE] ❌ Failed to grant credits:`, grantError?.message || grantError);
                 // Continue - client-side component or webhook will handle it

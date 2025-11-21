@@ -51,9 +51,13 @@ const MediaUploader = ({
     })
   }
 
+  // Get upload preset from environment variable, fallback to default
+  // Note: NEXT_PUBLIC_ variables are available in client components
+  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "jsm_imaginify";
+
   return (
     <CldUploadWidget
-      uploadPreset="jsm_imaginify"
+      uploadPreset={uploadPreset}
       options={{
         multiple: false,
         resourceType: "image",

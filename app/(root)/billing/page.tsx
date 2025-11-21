@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { openCustomerPortalWithReturnUrl, ensureStripeCustomerForCurrentUser, changeSubscription } from "@/lib/actions/subscription.actions";
+import { openCustomerPortalWithReturnUrl, ensureStripeCustomerForCurrentUser, changeSubscriptionPlan } from "@/lib/actions/subscription.actions";
 import { prisma } from "@/lib/database/prisma";
 import { getUserById } from "@/lib/actions/user.actions";
 import { auth } from "@clerk/nextjs";
@@ -118,7 +118,7 @@ const BillingPage = async () => {
   const autoTopUpAmount = autoTopUpInfo?.autoTopUpAmountCredits ?? 0;
   const lowBalanceThreshold = autoTopUpInfo?.lowBalanceThreshold ?? 0;
 
-  // Fetch invoices
+  // Fetch invoices and current priceId (for legacy users without DB subscription)
   let invoices: Stripe.Invoice[] = [];
   let currentPriceId: string | null = null;
   if (customerId && stripe) {
@@ -144,27 +144,40 @@ const BillingPage = async () => {
     }
   }
 
-  // Available plans
-  const plans = [
-    {
-      name: "Starter",
-      price: "$10",
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER,
-      credits: 100,
-    },
-    {
-      name: "Pro",
-      price: "$30",
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO,
-      credits: 500,
-    },
-    {
-      name: "Business",
-      price: "$60",
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SCALE,
-      credits: 1000,
-    },
-  ];
+  // Load subscription plans from the Price Book (admin-managed)
+  const subscriptionPlans = await prisma.subscriptionPlan.findMany({
+    orderBy: [
+      { planFamily: "asc" },
+      { version: "desc" },
+    ],
+  });
+
+  const fallbackPlan =
+    !userSubscription && currentPriceId
+      ? subscriptionPlans.find((plan) => plan.stripePriceId === currentPriceId)
+      : null;
+
+  const currentPlanRecord = userSubscription?.plan || fallbackPlan || null;
+  const currentPlanInternalId = currentPlanRecord?.internalId || null;
+
+  if (currentPlanRecord) {
+    currentPlan = `${currentPlanRecord.publicName}${
+      currentPlanRecord.isLegacyOnly ? " (Legacy)" : ""
+    }`;
+  }
+
+  // Prepare plan cards for UI (include current plan even if hidden)
+  const visiblePlans = subscriptionPlans.filter((plan) => {
+    if (!plan.isHidden) return true;
+    return plan.internalId === currentPlanInternalId;
+  });
+
+  const currencyFormatter = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -195,9 +208,19 @@ const BillingPage = async () => {
               {/* Current Plan */}
               <div>
                 <p className="text-sm text-gray-500 font-medium mb-2">Current Plan</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {currentPlan || (customerId ? "No active subscription" : "Not linked yet")}
-                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-2xl font-bold text-gray-900">
+                    {currentPlan || (customerId ? "No active subscription" : "Not linked yet")}
+                  </p>
+                  {userSubscription?.plan.isLegacyOnly && (
+                    <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-700">
+                      Legacy
+                    </span>
+                  )}
+                </div>
+                {userSubscription?.plan.version && userSubscription.plan.version > 1 && (
+                  <p className="text-xs text-gray-500 mt-1">Version {userSubscription.plan.version}</p>
+                )}
               </div>
 
               {/* Renewal Date */}
@@ -311,75 +334,132 @@ const BillingPage = async () => {
           </div>
         </div>
 
-        {/* Change Plan Section */}
-        {customerId && currentPriceId && (
+          {/* Change Plan Section */}
+          {visiblePlans.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
             <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
               <h2 className="text-lg font-semibold text-gray-900">Change Plan</h2>
-              <p className="text-sm text-gray-500 mt-1">Upgrade or downgrade your subscription</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Upgrade, downgrade, or switch plans using the rules defined in the Price Book.
+                </p>
             </div>
             <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {plans.map((plan) => {
-                  if (!plan.priceId) return null;
-                  const isCurrentPlan = plan.priceId === currentPriceId;
-                  // Determine if this is an upgrade or downgrade based on plan order
-                  const planOrder = ["Starter", "Pro", "Business"];
-                  const currentPlanIndex = plans.findIndex(p => p.priceId === currentPriceId);
-                  const thisPlanIndex = planOrder.indexOf(plan.name);
-                  const isUpgrade = !isCurrentPlan && thisPlanIndex > currentPlanIndex;
-                  const isDowngrade = !isCurrentPlan && thisPlanIndex < currentPlanIndex;
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {visiblePlans.map((plan) => {
+                    const isCurrentPlan = plan.internalId === currentPlanInternalId;
+                    const isUpgrade =
+                      !!currentPlanRecord &&
+                      currentPlanRecord.upgradeAllowedTo?.includes(plan.internalId);
+                    const isDowngrade =
+                      !!currentPlanRecord &&
+                      currentPlanRecord.downgradeAllowedTo?.includes(plan.internalId);
 
-                  return (
-                    <div
-                      key={plan.name}
-                      className={`p-4 rounded-lg border-2 ${
-                        isCurrentPlan
-                          ? "border-purple-500 bg-purple-50"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <div className="mb-3">
-                        <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">{plan.price}</p>
-                        <p className="text-xs text-gray-500 mt-1">{plan.credits} credits/month</p>
-                      </div>
-                      {isCurrentPlan ? (
-                        <Button disabled className="w-full" variant="outline">
-                          Current Plan
-                        </Button>
-                      ) : (
-                        <form action={async () => {
-                          "use server";
-                          await changeSubscription(plan.priceId!);
-                        }}>
-                          <Button
-                            type="submit"
-                            variant={isUpgrade ? "default" : "outline"}
-                            className={`w-full ${
-                              isUpgrade
-                                ? "bg-green-600 hover:bg-green-700 text-white"
-                                : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                            }`}
+                    const priceLabel = currencyFormatter.format(plan.priceUsd);
+
+                    let actionLabel = "";
+                    let actionVariant: "default" | "outline" = "default";
+                    let actionEnabled = Boolean(plan.stripePriceId);
+                    let actionIcon: "upgrade" | "downgrade" | null = null;
+
+                    if (!plan.stripePriceId) {
+                      actionEnabled = false;
+                      actionLabel = "Contact support";
+                    } else if (isCurrentPlan) {
+                      actionEnabled = false;
+                      actionLabel = "Current plan";
+                    } else if (currentPlanRecord) {
+                      if (isUpgrade) {
+                        actionLabel = "Upgrade";
+                        actionVariant = "default";
+                        actionIcon = "upgrade";
+                      } else if (isDowngrade) {
+                        actionLabel = "Downgrade";
+                        actionVariant = "outline";
+                        actionIcon = "downgrade";
+                      } else {
+                        actionEnabled = false;
+                        actionLabel = plan.isLegacyOnly ? "Legacy only" : "Not available";
+                      }
+                    } else {
+                      if (plan.isLegacyOnly || !plan.isActiveForNewSignups) {
+                        actionEnabled = false;
+                        actionLabel = plan.isLegacyOnly ? "Legacy only" : "Unavailable";
+                      } else {
+                        actionLabel = "Select plan";
+                        actionVariant = "default";
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={plan.internalId}
+                        className={`p-4 rounded-lg border-2 ${
+                          isCurrentPlan
+                            ? "border-purple-500 bg-purple-50"
+                            : "border-gray-200 hover:border-purple-200"
+                        }`}
+                      >
+                        <div className="mb-3 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-lg font-semibold text-gray-900">{plan.publicName}</h3>
+                            <div className="flex flex-wrap gap-1">
+                              {plan.isLegacyOnly && (
+                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-yellow-100 text-yellow-700">
+                                  Legacy
+                                </span>
+                              )}
+                              {!plan.isLegacyOnly && plan.isActiveForNewSignups && (
+                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-700">
+                                  Active
+                                </span>
+                              )}
+                              {plan.isDefaultForSignup && (
+                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-700">
+                                  Default
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <p className="text-2xl font-bold text-gray-900">{priceLabel}</p>
+                          <p className="text-xs text-gray-500">
+                            {plan.creditsPerCycle.toLocaleString()} credits / cycle · {plan.creditExpiryDays} day expiry
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            Family: {plan.planFamily} · Version v{plan.version}
+                          </p>
+                        </div>
+
+                        {actionEnabled ? (
+                          <form
+                            action={async () => {
+                              "use server";
+                              await changeSubscriptionPlan(plan.internalId);
+                            }}
                           >
-                            {isUpgrade ? (
-                              <>
-                                <ArrowUp className="w-4 h-4 mr-2" />
-                                Upgrade
-                              </>
-                            ) : (
-                              <>
-                                <ArrowDown className="w-4 h-4 mr-2" />
-                                Downgrade
-                              </>
-                            )}
+                            <Button
+                              type="submit"
+                              variant={actionVariant}
+                              className={`w-full ${
+                                actionVariant === "default"
+                                  ? "bg-green-600 hover:bg-green-700 text-white"
+                                  : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                              }`}
+                            >
+                              {actionIcon === "upgrade" && <ArrowUp className="w-4 h-4 mr-2" />}
+                              {actionIcon === "downgrade" && <ArrowDown className="w-4 h-4 mr-2" />}
+                              {actionLabel}
+                            </Button>
+                          </form>
+                        ) : (
+                          <Button disabled className="w-full" variant="outline">
+                            {actionLabel}
                           </Button>
-                        </form>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
             </div>
           </div>
         )}
