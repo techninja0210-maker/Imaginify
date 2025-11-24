@@ -1,26 +1,12 @@
 import { requireAdmin } from "@/lib/auth/admin-auth";
-import { prisma } from "@/lib/database/prisma";
 import { PriceBookEntryForm } from "@/components/admin/PriceBookEntryForm";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-async function getAllOrganizations() {
-  return prisma.organization.findMany({
-    select: {
-      id: true,
-      name: true,
-      clerkId: true,
-    },
-    orderBy: { name: "asc" },
-  });
-}
-
 const NewPriceBookPage = async () => {
   await requireAdmin();
-
-  const organizations = await getAllOrganizations();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -48,10 +34,7 @@ const NewPriceBookPage = async () => {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <PriceBookEntryForm
-            entry={null}
-            organizations={organizations}
-          />
+          <PriceBookEntryForm entry={null} />
         </div>
       </div>
     </div>
@@ -59,4 +42,3 @@ const NewPriceBookPage = async () => {
 };
 
 export default NewPriceBookPage;
-

@@ -23,8 +23,17 @@ export async function addJob({ job, userId, organizationId, path }: AddJobParams
       throw new Error("User not found");
     }
 
-    // Check if user has enough credits using the new grant system
-    const creditCost = 1; // Default cost, can be made configurable per job type
+    // Get credit cost from Price Book based on pipeline type
+    const pipelineKey = (job as any).workflowType || 'unknown';
+    let creditCost: number;
+    try {
+      const { getCreditCost } = await import('@/lib/services/pricing');
+      creditCost = await getCreditCost(pipelineKey);
+    } catch (error: any) {
+      // Fallback to default if price book entry not found
+      console.warn(`Price book entry not found for ${pipelineKey}, using default cost of 1`);
+      creditCost = 1;
+    }
     
     // Get active credit grants to check availability
     const now = new Date();
@@ -397,194 +406,4 @@ export async function getOrganizationJobs({
   }
 }
 
-// CREATE JOB QUOTE
-export async function createJobQuote({
-  organizationId,
-  userId,
-  workflowType,
-  parameters,
-  totalCredits,
-  breakdown,
-  expiresAt
-}: CreateJobQuoteParams) {
-  try {
-    const quote = await prisma.jobQuote.create({
-      data: {
-        organizationId,
-        userId,
-        workflowType,
-        parameters,
-        totalCredits,
-        breakdown,
-        expiresAt
-      }
-    });
-
-    return JSON.parse(JSON.stringify(quote));
-  } catch (error) {
-    handleError(error);
-  }
-}
-
-// CONFIRM JOB QUOTE (DEPRECATED - Use POST /api/jobs instead)
-// Kept for backward compatibility but uses user-scoped credits now
-export async function confirmJobQuote(quoteId: string, userId: string) {
-  try {
-    // Get user to resolve clerkId
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-      select: { id: true }
-    });
-
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      // Get the quote
-      const quote = await tx.jobQuote.findUnique({
-        where: { id: quoteId }
-      });
-
-      if (!quote || quote.userId !== user.id) {
-        throw new Error("Quote not found or unauthorized");
-      }
-
-      if (quote.status !== 'active') {
-        throw new Error("Quote is no longer active");
-      }
-
-      if (quote.expiresAt < new Date()) {
-        throw new Error("Quote has expired");
-      }
-
-      // Check user has enough credits using the new grant system
-      const now = new Date();
-      const activeGrants = await tx.creditGrant.findMany({
-        where: {
-          userId: user.id,
-          expiresAt: { gt: now },
-        },
-        orderBy: [
-          { type: "asc" }, // SUBSCRIPTION first
-          { expiresAt: "asc" }, // Earliest expiring first
-        ],
-      });
-
-      // Calculate total available credits
-      let totalAvailable = 0;
-      for (const grant of activeGrants) {
-        const available = grant.amount - grant.usedAmount;
-        if (available > 0) {
-          totalAvailable += available;
-        }
-      }
-
-      if (totalAvailable < quote.totalCredits) {
-        throw new Error(`Insufficient credits. Available: ${totalAvailable}, Required: ${quote.totalCredits}. Please top up or upgrade your plan.`);
-      }
-
-      // Create job
-      const job = await tx.job.create({
-        data: {
-          organizationId: quote.organizationId,
-          userId: quote.userId,
-          title: `Job - ${quote.workflowType}`,
-          description: `Generated from quote ${quoteId}`,
-          quotedCredits: quote.totalCredits,
-          quotedAt: quote.createdAt,
-          confirmedAt: new Date(),
-          status: 'confirmed',
-          totalRetailCostCredits: quote.totalCredits,
-          totalInternalCostUsd: (quote.breakdown as any)?.internalUsd || null,
-          metadata: quote.parameters as any
-        }
-      });
-
-      // Deduct from grants in priority order (subscription first, then top-ups)
-      let remaining = quote.totalCredits;
-      const grantDeductions: Array<{ grantId: string; amount: number }> = [];
-
-      for (const grant of activeGrants) {
-        if (remaining <= 0) break;
-
-        const available = grant.amount - grant.usedAmount;
-        if (available <= 0) continue; // Skip exhausted grants
-
-        const toDeduct = Math.min(remaining, available);
-
-        // Update grant
-        await tx.creditGrant.update({
-          where: { id: grant.id },
-          data: {
-            usedAmount: { increment: toDeduct },
-          },
-        });
-
-        grantDeductions.push({
-          grantId: grant.id,
-          amount: toDeduct,
-        });
-
-        remaining -= toDeduct;
-      }
-
-      if (remaining > 0) {
-        throw new Error(`Failed to deduct all credits. Remaining: ${remaining}`);
-      }
-
-      // Create ledger entry
-      const idempotencyKey = `quote:${quoteId}:${Date.now()}`;
-      await tx.creditLedger.create({
-        data: {
-          organizationId: quote.organizationId,
-          userId: quote.userId,
-          jobId: job.id,
-          type: 'deduction',
-          amount: -quote.totalCredits,
-          reason: `Job creation: ${job.id}`,
-          idempotencyKey,
-          metadata: {
-            grantDeductions,
-            workflowType: quote.workflowType,
-          },
-        }
-      });
-
-      // Update user balance (for backward compatibility)
-      await tx.user.update({
-        where: { id: user.id },
-        data: { 
-          creditBalance: { decrement: quote.totalCredits },
-          creditBalanceVersion: { increment: 1 },
-        }
-      });
-
-      // Mirror to org balance (for backward compatibility)
-      const orgCredits = await tx.creditBalance.findUnique({
-        where: { organizationId: quote.organizationId }
-      });
-      if (orgCredits) {
-        await tx.creditBalance.update({
-          where: { organizationId: quote.organizationId },
-          data: { 
-            balance: { decrement: quote.totalCredits },
-            version: { increment: 1 },
-          }
-        });
-      }
-
-      // Mark quote as used
-      await tx.jobQuote.update({
-        where: { id: quoteId },
-        data: { status: 'used' }
-      });
-
-      return job;
-    });
-
-    return JSON.parse(JSON.stringify(result));
-  } catch (error) {
-    handleError(error);
-  }
-}
+// Quote system removed - jobs are created directly via addJob()

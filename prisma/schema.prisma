@@ -58,7 +58,6 @@ model Organization {
   jobQuotes JobQuote[]
   jobs      Job[]
   members   OrganizationMember[]
-  priceBook PriceBookEntry[]
 
   @@map("organizations")
 }
@@ -116,19 +115,14 @@ model CreditLedger {
 
 
 model PriceBookEntry {
-  id                  String       @id @default(cuid())
-  organizationId      String
-  actionKey           String
-  unitType            String
-  unitStep            Int          @default(1)
-  retailCostPerUnit   Int
-  internalCostFormula String
-  isActive            Boolean      @default(true)
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
-  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id            String       @id @default(cuid())
+  pipelineKey   String
+  creditCost    Int
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
-  @@unique([organizationId, actionKey])
+  @@unique([pipelineKey])
   @@map("price_book")
 }
 
