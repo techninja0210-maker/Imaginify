@@ -388,7 +388,6 @@ export async function POST(request: Request) {
                   console.error(`[WEBHOOK] Error granting upgrade credits:`, upgradeError);
                   // Don't fail the webhook, but log the error
                 }
-              }
             }
 
             // Handle DOWNGRADE: Store in pending_plan_id (already done in changeSubscriptionPlan, but ensure it's set)
