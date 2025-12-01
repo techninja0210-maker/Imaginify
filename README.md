@@ -154,6 +154,9 @@ NEXT_PUBLIC_REWARDFUL_ID=your-rewardful-id
 
 # Cron Jobs (Optional - for auto-topup and low balance checks)
 CRON_SECRET=your-cron-secret
+
+# Amazon Product Ingestion API (Internal use only)
+AMAZON_INGEST_API_KEY=your-amazon-ingest-api-key-here
 ```
 
 ### How to Obtain Credentials

@@ -287,6 +287,35 @@ export async function importTrendingProducts({
           },
         });
 
+        // Check if this product already has a different Amazon match
+        const existingMatches = await prisma.productAmazonMatch.findMany({
+          where: { productId },
+        });
+
+        // If there are existing matches with different ASINs, unmark them
+        // (This handles the case where Lailin changes the Amazon URL)
+        if (existingMatches.length > 0) {
+          const differentMatches = existingMatches.filter(
+            (match) => match.asin !== amazonAsin
+          );
+          
+          if (differentMatches.length > 0) {
+            // Unmark old matches when a new one is provided via spreadsheet
+            // This indicates a manual update/changed URL
+            await prisma.productAmazonMatch.updateMany({
+              where: {
+                productId,
+                asin: { not: amazonAsin },
+              },
+              data: {
+                chosen: false,
+              },
+            });
+          }
+        }
+
+        // Create or update the match for this ASIN
+        // When provided via spreadsheet import, treat it as manually chosen
         await prisma.productAmazonMatch.upsert({
           where: {
             productId_asin: {
@@ -298,7 +327,9 @@ export async function importTrendingProducts({
             confidence,
             source: "kalodata",
             method: "spreadsheet-import",
-            chosen: confidence >= 0.5,
+            // Mark as chosen when manually provided in spreadsheet (even if confidence is low)
+            // This handles Lailin's manual matching
+            chosen: true,
           },
           create: {
             productId,
@@ -306,7 +337,8 @@ export async function importTrendingProducts({
             confidence,
             source: "kalodata",
             method: "spreadsheet-import",
-            chosen: confidence >= 0.5,
+            // Mark as chosen when manually provided in spreadsheet
+            chosen: true,
           },
         });
 
