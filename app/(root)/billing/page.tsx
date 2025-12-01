@@ -6,7 +6,7 @@ import { auth } from "@clerk/nextjs";
 import { notFound, redirect } from "next/navigation";
 import Stripe from "stripe";
 import Link from "next/link";
-import { CreditCard, Calendar, Coins, TrendingUp, Settings, ShoppingBag, FileText, Download, ArrowUp, ArrowDown } from "lucide-react";
+import { CreditCard, Calendar, Coins, TrendingUp, Settings, ShoppingBag, FileText, Download, ArrowUp, ArrowDown, Check } from "lucide-react";
 import { CreditBreakdown } from "@/components/shared/CreditBreakdown";
 
 // Force dynamic rendering to ensure fresh credit data
@@ -21,6 +21,15 @@ const BillingPage = async () => {
   if (!user) notFound();
   let customerId = user.stripeCustomerId ?? null;
 
+  // Fetch user with pending plan info
+  const userWithPendingPlan = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    select: {
+      id: true,
+      pendingPlanId: true,
+    }
+  });
+
   // Fetch active subscription from database (new system)
   const userSubscription = await prisma.userSubscription.findFirst({
     where: {
@@ -34,6 +43,13 @@ const BillingPage = async () => {
       currentPeriodEnd: "desc",
     },
   });
+
+  // Fetch pending plan if exists
+  const pendingPlan = userWithPendingPlan?.pendingPlanId
+    ? await prisma.subscriptionPlan.findUnique({
+        where: { id: userWithPendingPlan.pendingPlanId },
+      })
+    : null;
 
   // Fetch active subscription from Stripe (fallback)
   let currentPlan: string | null = null;
@@ -181,103 +197,115 @@ const BillingPage = async () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
+      {/* Simple Header */}
+      <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-6 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">Billing</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Manage your subscription and invoices
+          <h1 className="text-2xl font-semibold text-gray-900">Billing</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Manage your subscription and billing
           </p>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Subscription Status Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          {/* Subscription Card - Clean & Simple */}
+          <div className="lg:col-span-2 bg-white rounded-lg border">
+            <div className="px-6 py-4 border-b">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
-                  <CreditCard className="w-5 h-5 text-white" />
-                </div>
-                <h2 className="text-lg font-semibold text-gray-900">Subscription</h2>
+                <CreditCard className="w-5 h-5 text-gray-600" />
+                <h2 className="text-lg font-medium text-gray-900">Subscription</h2>
               </div>
             </div>
             <div className="p-6 space-y-6">
               {/* Current Plan */}
               <div>
-                <p className="text-sm text-gray-500 font-medium mb-2">Current Plan</p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-2xl font-bold text-gray-900">
+                <p className="text-sm text-gray-500 mb-1">Current Plan</p>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-2xl font-semibold text-gray-900">
                     {currentPlan || (customerId ? "No active subscription" : "Not linked yet")}
-                  </p>
+                  </h3>
+                  {userSubscription && (
+                    <span className="px-2 py-0.5 text-xs font-medium text-green-700 bg-green-50 rounded">
+                      Active
+                    </span>
+                  )}
                   {userSubscription?.plan.isLegacyOnly && (
-                    <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-100 text-yellow-700">
+                    <span className="px-2 py-0.5 text-xs font-medium text-yellow-700 bg-yellow-50 rounded">
                       Legacy
                     </span>
                   )}
                 </div>
-                {userSubscription?.plan.version && userSubscription.plan.version > 1 && (
-                  <p className="text-xs text-gray-500 mt-1">Version {userSubscription.plan.version}</p>
-                )}
               </div>
 
               {/* Renewal Date */}
               {renewsOn && (
-                <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-3 py-3 border-t">
                   <Calendar className="w-5 h-5 text-gray-400" />
                   <div>
-                    <p className="text-sm text-gray-500 font-medium">Renews on</p>
-                    <p className="text-base font-semibold text-gray-900">{renewsOn}</p>
+                    <p className="text-sm text-gray-500">Renews on</p>
+                    <p className="text-base font-medium text-gray-900">{renewsOn}</p>
                   </div>
                 </div>
               )}
 
               {/* Subscription Status */}
               {userSubscription && (
-                <div className="pt-4 border-t border-gray-200 space-y-2">
+                <div className="space-y-3">
                   {userSubscription.cancelAtPeriodEnd && (
-                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <p className="text-xs text-yellow-800 font-medium flex items-center gap-2">
-                        <span>⚠️</span>
-                        <span>Subscription will cancel on {renewsOn}</span>
+                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
+                      <p className="text-sm text-yellow-800">
+                        Subscription will cancel on {renewsOn}
                       </p>
                     </div>
                   )}
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Credits per cycle:</span>
-                    <span className="font-semibold text-gray-900">
-                      {userSubscription.plan.creditsPerCycle.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Credit expiry:</span>
-                    <span className="font-semibold text-gray-900">
-                      {userSubscription.plan.creditExpiryDays} days
-                    </span>
+                  {pendingPlan && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                      <p className="text-sm font-medium text-blue-900 mb-1">
+                        Downgrade Scheduled
+                      </p>
+                      <p className="text-sm text-blue-700">
+                        Will change to {pendingPlan.publicName} on {renewsOn}
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-2 gap-4 pt-3 border-t">
+                    <div>
+                      <p className="text-sm text-gray-500 mb-1">Credits per cycle</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {userSubscription.plan.creditsPerCycle.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500 mb-1">Credit expiry</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {userSubscription.plan.creditExpiryDays} days
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Auto Top-up Status */}
-              <div className="pt-4 border-t border-gray-200">
+              {/* Auto Top-up */}
+              <div className="pt-3 border-t">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <TrendingUp className="w-5 h-5 text-gray-400" />
                     <div>
-                      <p className="text-sm text-gray-500 font-medium">Auto Top-up</p>
+                      <p className="text-sm font-medium text-gray-900">Auto Top-up</p>
                       {autoTopUpEnabled && (
-                        <p className="text-xs text-gray-600 mt-1">
+                        <p className="text-xs text-gray-500">
                           {autoTopUpAmount} credits at {lowBalanceThreshold} threshold
                         </p>
                       )}
                     </div>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  <span className={`px-3 py-1 text-sm font-medium rounded ${
                     autoTopUpEnabled 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-gray-100 text-gray-600'
+                      ? 'text-green-700 bg-green-50' 
+                      : 'text-gray-600 bg-gray-100'
                   }`}>
                     {autoTopUpEnabled ? 'Enabled' : 'Disabled'}
                   </span>
@@ -285,7 +313,7 @@ const BillingPage = async () => {
               </div>
 
               {/* Manage Subscription Button */}
-              <div className="pt-4 border-t border-gray-200">
+              <div className="pt-3 border-t">
                 {customerId ? (
                   <form action={async () => {
                     "use server";
@@ -293,7 +321,7 @@ const BillingPage = async () => {
                   }}>
                     <Button
                       type="submit"
-                      className="w-full py-2.5 bg-purple-600 text-white hover:bg-purple-700 font-medium rounded-lg transition-colors"
+                      className="w-full"
                     >
                       <Settings className="w-4 h-4 mr-2" />
                       Manage Subscription
@@ -307,7 +335,7 @@ const BillingPage = async () => {
                   }}>
                     <Button 
                       type="submit" 
-                      className="w-full py-2.5 bg-purple-600 text-white hover:bg-purple-700 font-medium rounded-lg transition-colors"
+                      className="w-full"
                     >
                       <Settings className="w-4 h-4 mr-2" />
                       Link Billing Account
@@ -318,14 +346,12 @@ const BillingPage = async () => {
             </div>
           </div>
 
-          {/* Credit Breakdown Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
+          {/* Credit Breakdown Card - Clean & Simple */}
+          <div className="bg-white rounded-lg border">
+            <div className="px-6 py-4 border-b">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center">
-                  <Coins className="w-5 h-5 text-white" />
-                </div>
-                <h2 className="text-lg font-semibold text-gray-900">Credit Breakdown</h2>
+                <Coins className="w-5 h-5 text-gray-600" />
+                <h2 className="text-lg font-medium text-gray-900">Credit Breakdown</h2>
               </div>
             </div>
             <div className="p-6">
@@ -334,99 +360,91 @@ const BillingPage = async () => {
           </div>
         </div>
 
-          {/* Change Plan Section */}
-          {visiblePlans.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
-            <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
-              <h2 className="text-lg font-semibold text-gray-900">Change Plan</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Upgrade, downgrade, or switch plans using the rules defined in the Price Book.
-                </p>
+        {/* Available Plans - Clean & Simple */}
+        {visiblePlans.length > 0 && (
+          <div className="bg-white rounded-lg border mb-6">
+            <div className="px-6 py-4 border-b">
+              <h2 className="text-lg font-medium text-gray-900">Available Plans</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Upgrade, downgrade, or switch plans
+              </p>
             </div>
             <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {visiblePlans.map((plan) => {
-                    const isCurrentPlan = plan.internalId === currentPlanInternalId;
-                    const isUpgrade =
-                      !!currentPlanRecord &&
-                      currentPlanRecord.upgradeAllowedTo?.includes(plan.internalId);
-                    const isDowngrade =
-                      !!currentPlanRecord &&
-                      currentPlanRecord.downgradeAllowedTo?.includes(plan.internalId);
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {visiblePlans.map((plan) => {
+                  const isCurrentPlan = plan.internalId === currentPlanInternalId;
+                  const isUpgrade =
+                    !!currentPlanRecord &&
+                    currentPlanRecord.upgradeAllowedTo?.includes(plan.internalId);
+                  const isDowngrade =
+                    !!currentPlanRecord &&
+                    currentPlanRecord.downgradeAllowedTo?.includes(plan.internalId);
 
-                    const priceLabel = currencyFormatter.format(plan.priceUsd);
+                  const priceLabel = currencyFormatter.format(plan.priceUsd);
 
-                    let actionLabel = "";
-                    let actionVariant: "default" | "outline" = "default";
-                    let actionEnabled = Boolean(plan.stripePriceId);
-                    let actionIcon: "upgrade" | "downgrade" | null = null;
+                  let actionLabel = "";
+                  let actionVariant: "default" | "outline" = "default";
+                  let actionEnabled = Boolean(plan.stripePriceId);
+                  let actionIcon: "upgrade" | "downgrade" | null = null;
 
-                    if (!plan.stripePriceId) {
-                      actionEnabled = false;
-                      actionLabel = "Contact support";
-                    } else if (isCurrentPlan) {
-                      actionEnabled = false;
-                      actionLabel = "Current plan";
-                    } else if (currentPlanRecord) {
-                      if (isUpgrade) {
-                        actionLabel = "Upgrade";
-                        actionVariant = "default";
-                        actionIcon = "upgrade";
-                      } else if (isDowngrade) {
-                        actionLabel = "Downgrade";
-                        actionVariant = "outline";
-                        actionIcon = "downgrade";
-                      } else {
-                        actionEnabled = false;
-                        actionLabel = plan.isLegacyOnly ? "Legacy only" : "Not available";
-                      }
+                  if (!plan.stripePriceId) {
+                    actionEnabled = false;
+                    actionLabel = "Contact support";
+                  } else if (isCurrentPlan) {
+                    actionEnabled = false;
+                    actionLabel = "Current plan";
+                  } else if (currentPlanRecord) {
+                    if (isUpgrade) {
+                      actionLabel = "Upgrade";
+                      actionVariant = "default";
+                      actionIcon = "upgrade";
+                    } else if (isDowngrade) {
+                      actionLabel = "Downgrade";
+                      actionVariant = "outline";
+                      actionIcon = "downgrade";
                     } else {
-                      if (plan.isLegacyOnly || !plan.isActiveForNewSignups) {
-                        actionEnabled = false;
-                        actionLabel = plan.isLegacyOnly ? "Legacy only" : "Unavailable";
-                      } else {
-                        actionLabel = "Select plan";
-                        actionVariant = "default";
-                      }
+                      actionEnabled = false;
+                      actionLabel = plan.isLegacyOnly ? "Legacy only" : "Not available";
                     }
+                  } else {
+                    if (plan.isLegacyOnly || !plan.isActiveForNewSignups) {
+                      actionEnabled = false;
+                      actionLabel = plan.isLegacyOnly ? "Legacy only" : "Unavailable";
+                    } else {
+                      actionLabel = "Select plan";
+                      actionVariant = "default";
+                    }
+                  }
 
-                    return (
-                      <div
-                        key={plan.internalId}
-                        className={`p-4 rounded-lg border-2 ${
-                          isCurrentPlan
-                            ? "border-purple-500 bg-purple-50"
-                            : "border-gray-200 hover:border-purple-200"
-                        }`}
-                      >
-                        <div className="mb-3 space-y-1">
-                          <div className="flex items-center justify-between gap-2">
+                  return (
+                    <div
+                      key={plan.internalId}
+                      className={`rounded-lg border-2 p-5 ${
+                        isCurrentPlan
+                          ? "border-purple-500 bg-purple-50"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      {isCurrentPlan && (
+                        <div className="flex items-center gap-2 mb-3">
+                          <Check className="w-4 h-4 text-purple-600" />
+                          <span className="text-xs font-medium text-purple-600">Current</span>
+                        </div>
+                      )}
+                      
+                      <div className="space-y-3">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
                             <h3 className="text-lg font-semibold text-gray-900">{plan.publicName}</h3>
-                            <div className="flex flex-wrap gap-1">
-                              {plan.isLegacyOnly && (
-                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-yellow-100 text-yellow-700">
-                                  Legacy
-                                </span>
-                              )}
-                              {!plan.isLegacyOnly && plan.isActiveForNewSignups && (
-                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-700">
-                                  Active
-                                </span>
-                              )}
-                              {plan.isDefaultForSignup && (
-                                <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-700">
-                                  Default
-                                </span>
-                              )}
-                            </div>
+                            {plan.isLegacyOnly && (
+                              <span className="px-2 py-0.5 text-xs font-medium text-yellow-700 bg-yellow-50 rounded">
+                                Legacy
+                              </span>
+                            )}
                           </div>
-
-                          <p className="text-2xl font-bold text-gray-900">{priceLabel}</p>
-                          <p className="text-xs text-gray-500">
-                            {plan.creditsPerCycle.toLocaleString()} credits / cycle · {plan.creditExpiryDays} day expiry
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            Family: {plan.planFamily} · Version v{plan.version}
+                          <p className="text-2xl font-semibold text-gray-900">{priceLabel}</p>
+                          <p className="text-sm text-gray-600">
+                            {plan.creditsPerCycle.toLocaleString()} credits / cycle
                           </p>
                         </div>
 
@@ -440,11 +458,7 @@ const BillingPage = async () => {
                             <Button
                               type="submit"
                               variant={actionVariant}
-                              className={`w-full ${
-                                actionVariant === "default"
-                                  ? "bg-green-600 hover:bg-green-700 text-white"
-                                  : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                              }`}
+                              className="w-full"
                             >
                               {actionIcon === "upgrade" && <ArrowUp className="w-4 h-4 mr-2" />}
                               {actionIcon === "downgrade" && <ArrowDown className="w-4 h-4 mr-2" />}
@@ -457,24 +471,25 @@ const BillingPage = async () => {
                           </Button>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
 
-        {/* Quick Actions */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
-          <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
-            <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
+        {/* Quick Actions - Clean & Simple */}
+        <div className="bg-white rounded-lg border mb-6">
+          <div className="px-6 py-4 border-b">
+            <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>
           </div>
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Link href="/credits">
                 <Button 
                   variant="outline"
-                  className="w-full py-3 border-2 border-green-600 text-green-600 hover:bg-green-50 font-medium rounded-lg transition-colors"
+                  className="w-full justify-start"
                 >
                   <ShoppingBag className="w-4 h-4 mr-2" />
                   Purchase Credits
@@ -484,7 +499,7 @@ const BillingPage = async () => {
               <Link href="/pricing">
                 <Button 
                   variant="outline"
-                  className="w-full py-3 border-2 border-purple-600 text-purple-600 hover:bg-purple-50 font-medium rounded-lg transition-colors"
+                  className="w-full justify-start"
                 >
                   <TrendingUp className="w-4 h-4 mr-2" />
                   View Plans
@@ -494,28 +509,26 @@ const BillingPage = async () => {
           </div>
         </div>
 
-        {/* Invoices Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
+        {/* Invoices - Clean & Simple */}
+        <div className="bg-white rounded-lg border">
+          <div className="px-6 py-4 border-b">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-                <FileText className="w-5 h-5 text-white" />
-              </div>
-              <h2 className="text-lg font-semibold text-gray-900">Invoices</h2>
+              <FileText className="w-5 h-5 text-gray-600" />
+              <h2 className="text-lg font-medium text-gray-900">Billing History</h2>
             </div>
           </div>
           <div className="p-6">
             {!customerId ? (
               <div className="text-center py-12">
-                <FileText className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                <p className="text-sm text-gray-500 font-medium">No billing account linked</p>
-                <p className="text-xs text-gray-400 mt-1">Link your billing account to view invoices</p>
+                <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                <p className="text-sm font-medium text-gray-900 mb-1">No billing account linked</p>
+                <p className="text-xs text-gray-500">Link your billing account to view invoices</p>
               </div>
             ) : invoices.length === 0 ? (
               <div className="text-center py-12">
-                <FileText className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                <p className="text-sm text-gray-500 font-medium">No invoices yet</p>
-                <p className="text-xs text-gray-400 mt-1">Your invoices will appear here once you make a purchase</p>
+                <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                <p className="text-sm font-medium text-gray-900 mb-1">No invoices yet</p>
+                <p className="text-xs text-gray-500">Your invoices will appear here once you make a purchase</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -527,52 +540,45 @@ const BillingPage = async () => {
                   });
                   const amount = invoice.amount_paid ? (invoice.amount_paid / 100).toFixed(2) : '0.00';
                   const status = invoice.status === 'paid' ? 'Paid' : invoice.status === 'open' ? 'Open' : invoice.status === 'void' ? 'Void' : 'Draft';
-                  const statusColor = invoice.status === 'paid' ? 'bg-green-100 text-green-700' : invoice.status === 'open' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700';
+                  const statusColor = invoice.status === 'paid' 
+                    ? 'text-green-700 bg-green-50' 
+                    : invoice.status === 'open' 
+                    ? 'text-yellow-700 bg-yellow-50'
+                    : 'text-gray-700 bg-gray-50';
                   const invoiceUrl = invoice.hosted_invoice_url || invoice.invoice_pdf;
 
                   return (
                     <div
                       key={invoice.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
                     >
                       <div className="flex items-center gap-4 flex-1 min-w-0">
-                        <div className="flex-shrink-0">
-                          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                            <FileText className="w-5 h-5 text-blue-600" />
-                          </div>
-                        </div>
+                        <FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-1">
-                            <p className="text-sm font-semibold text-gray-900 truncate">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">
                               {invoice.number || invoice.id}
                             </p>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded ${statusColor}`}>
                               {status}
                             </span>
                           </div>
-                          <p className="text-xs text-gray-500">
-                            {date} • ${amount}
+                          <p className="text-sm text-gray-600">
+                            {date} · ${amount}
                           </p>
-                          {invoice.description && (
-                            <p className="text-xs text-gray-400 mt-1 truncate">
-                              {invoice.description}
-                            </p>
-                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                        {invoiceUrl && (
-                          <a
-                            href={invoiceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            {invoice.hosted_invoice_url ? 'View' : 'Download'}
-                          </a>
-                        )}
-                      </div>
+                      {invoiceUrl && (
+                        <a
+                          href={invoiceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded"
+                        >
+                          <Download className="w-4 h-4" />
+                          {invoice.hosted_invoice_url ? 'View' : 'Download'}
+                        </a>
+                      )}
                     </div>
                   );
                 })}

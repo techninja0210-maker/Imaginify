@@ -193,11 +193,12 @@ export async function changeSubscriptionPlan(targetPlanInternalId: string) {
     redirect("/billing?message=subscription-unchanged");
   }
 
-  // Ensure this transition is allowed
+  // Ensure this transition is allowed and determine if it's an upgrade or downgrade
   const allowedUpgrades = new Set(activeSubscription.plan.upgradeAllowedTo || []);
   const allowedDowngrades = new Set(activeSubscription.plan.downgradeAllowedTo || []);
-  const isAllowed =
-    allowedUpgrades.has(targetPlan.internalId) || allowedDowngrades.has(targetPlan.internalId);
+  const isUpgrade = allowedUpgrades.has(targetPlan.internalId);
+  const isDowngrade = allowedDowngrades.has(targetPlan.internalId);
+  const isAllowed = isUpgrade || isDowngrade;
 
   if (!isAllowed) {
     throw new Error("You cannot switch to this plan from your current plan. Please contact support.");
@@ -221,20 +222,54 @@ export async function changeSubscriptionPlan(targetPlanInternalId: string) {
   const subscription = subscriptions.data[0];
   const subscriptionItem = subscription.items.data[0];
 
-  await stripe.subscriptions.update(subscription.id, {
-    items: [
-      {
-        id: subscriptionItem.id,
-        price: targetPlan.stripePriceId,
+  if (isUpgrade) {
+    // UPGRADE: Immediate change with proration, full credits granted immediately
+    await stripe.subscriptions.update(subscription.id, {
+      items: [
+        {
+          id: subscriptionItem.id,
+          price: targetPlan.stripePriceId,
+        },
+      ],
+      proration_behavior: "always_invoice",
+      billing_cycle_anchor: "unchanged",
+      metadata: {
+        clerkUserId: userId,
+        changeType: "upgrade",
+        targetPlanId: targetPlan.id,
       },
-    ],
-    proration_behavior: "always_invoice",
-    metadata: {
-      clerkUserId: userId,
-    },
-  });
+    });
 
-  redirect("/billing?success=1&message=subscription-updated");
+    // The webhook will handle the immediate credit grant and plan update
+    redirect("/billing?success=1&message=subscription-upgraded");
+  } else {
+    // DOWNGRADE: Defer until renewal, store in pending_plan_id
+    await stripe.subscriptions.update(subscription.id, {
+      items: [
+        {
+          id: subscriptionItem.id,
+          price: targetPlan.stripePriceId,
+        },
+      ],
+      proration_behavior: "none",
+      billing_cycle_anchor: "unchanged",
+      metadata: {
+        clerkUserId: userId,
+        changeType: "downgrade",
+        targetPlanId: targetPlan.id,
+      },
+    });
+
+    // Store pending downgrade in user record
+    await prisma.user.update({
+      where: { clerkId: userId },
+      data: {
+        pendingPlanId: targetPlan.id,
+      },
+    });
+
+    redirect("/billing?success=1&message=subscription-downgrade-pending");
+  }
 }
 
 

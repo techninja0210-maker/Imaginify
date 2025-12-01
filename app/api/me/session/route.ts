@@ -58,6 +58,27 @@ export async function GET() {
       amount: orgCredits?.autoTopUpAmountCredits || null,
     };
 
+    // Get pending plan info
+    const userWithPendingPlan = await prisma.user.findUnique({
+      where: { clerkId: userId },
+      select: {
+        pendingPlanId: true,
+      }
+    });
+
+    const pendingPlan = userWithPendingPlan?.pendingPlanId
+      ? await prisma.subscriptionPlan.findUnique({
+          where: { id: userWithPendingPlan.pendingPlanId },
+          select: {
+            id: true,
+            internalId: true,
+            publicName: true,
+            creditsPerCycle: true,
+            priceUsd: true,
+          }
+        })
+      : null;
+
     // Get Stripe subscription info
     let plan = null;
     let subscription = null;
@@ -197,6 +218,13 @@ export async function GET() {
       },
       plan,
       subscription,
+      pendingPlan: pendingPlan ? {
+        id: pendingPlan.id,
+        internalId: pendingPlan.internalId,
+        publicName: pendingPlan.publicName,
+        creditsPerCycle: pendingPlan.creditsPerCycle,
+        priceUsd: pendingPlan.priceUsd,
+      } : null,
       balance: {
         userBalance,
         orgBalance,

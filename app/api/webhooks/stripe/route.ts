@@ -250,6 +250,8 @@ export async function POST(request: Request) {
     const customerId = subscription.customer as string;
     const stripeSubscriptionId = subscription.id;
     const status = subscription.status; // active, canceled, past_due, unpaid, trialing
+    const changeType = subscription.metadata?.changeType as string | undefined; // "upgrade" or "downgrade"
+    const targetPlanId = subscription.metadata?.targetPlanId as string | undefined;
     
     try {
       // Find user by Stripe customer ID
@@ -267,7 +269,7 @@ export async function POST(request: Request) {
       }
       
       if (user) {
-        console.log(`[WEBHOOK] Subscription ${eventType} for user ${user.clerkId}, status: ${status}`);
+        console.log(`[WEBHOOK] Subscription ${eventType} for user ${user.clerkId}, status: ${status}, changeType: ${changeType}`);
         
         // Get price ID from subscription
         const priceId = subscription.items?.data?.[0]?.price?.id as string | undefined;
@@ -296,6 +298,12 @@ export async function POST(request: Request) {
               ? new Date(subscription.current_period_end * 1000)
               : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default 30 days
 
+            // Get existing subscription to compare plans
+            const existingSubscription = await prisma.userSubscription.findUnique({
+              where: { stripeSubscriptionId },
+              include: { plan: true }
+            });
+
             // Update or create UserSubscription
             const userSubscription = await prisma.userSubscription.upsert({
               where: { stripeSubscriptionId },
@@ -320,6 +328,96 @@ export async function POST(request: Request) {
             });
 
             console.log(`[WEBHOOK] UserSubscription ${eventType === "customer.subscription.created" ? "created" : "updated"}: ${userSubscription.id}, plan: ${plan.publicName}, status: ${subscriptionStatus}`);
+
+            // Handle IMMEDIATE CANCELLATION: Disable entitlements if canceled immediately
+            const isImmediateCancel = status === "canceled" && !subscription.cancel_at_period_end;
+            if (isImmediateCancel) {
+              console.log(`[WEBHOOK] Immediate cancellation detected: disabling entitlements for user ${user.clerkId}`);
+              // Subscription is canceled immediately - disable entitlements
+              // The subscription status is already set to CANCELED above
+              // Clear pending downgrades since subscription is ending
+              await prisma.user.update({
+                where: { clerkId: user.clerkId },
+                data: {
+                  pendingPlanId: null,
+                }
+              });
+            }
+
+            // Handle UPGRADE: Grant full monthly credits immediately (not prorated)
+            // Detect upgrade by metadata or by comparing plan prices
+            const isUpgrade = changeType === "upgrade" || 
+              (existingSubscription && existingSubscription.plan && plan.priceUsd > existingSubscription.plan.priceUsd);
+            const isPlanChange = existingSubscription && existingSubscription.planId !== plan.id;
+            
+            if (eventType === "customer.subscription.updated" && isUpgrade && status === "active" && isPlanChange) {
+                console.log(`[WEBHOOK] Processing upgrade: granting full monthly credits for plan ${plan.publicName}`);
+                
+                try {
+                  // Grant full monthly credit allowance immediately
+                  const expiresAt = new Date(currentPeriodEnd);
+                  expiresAt.setDate(expiresAt.getDate() + plan.creditExpiryDays);
+
+                  await grantCreditsWithExpiry({
+                    userId: user.clerkId,
+                    type: "SUBSCRIPTION",
+                    amount: plan.creditsPerCycle,
+                    expiresAt,
+                    reason: `Subscription upgrade to ${plan.publicName} - full monthly allowance`,
+                    planId: plan.id,
+                    subscriptionId: userSubscription.id,
+                    idempotencyKey: `stripe:subscription:upgrade:${stripeSubscriptionId}:${Date.now()}`,
+                    metadata: {
+                      stripeSubscriptionId,
+                      planName: plan.publicName,
+                      changeType: "upgrade",
+                      fullMonthlyAllowance: true,
+                    }
+                  });
+
+                  // Update user's plan immediately for upgrades
+                  await prisma.user.update({
+                    where: { clerkId: user.clerkId },
+                    data: {
+                      pendingPlanId: null, // Clear any pending downgrade
+                    }
+                  });
+
+                  console.log(`[WEBHOOK] Upgrade complete: granted ${plan.creditsPerCycle} credits for plan ${plan.publicName}`);
+                } catch (upgradeError: any) {
+                  console.error(`[WEBHOOK] Error granting upgrade credits:`, upgradeError);
+                  // Don't fail the webhook, but log the error
+                }
+              }
+            }
+
+            // Handle DOWNGRADE: Store in pending_plan_id (already done in changeSubscriptionPlan, but ensure it's set)
+            // Detect downgrade by metadata or by comparing plan prices
+            const isDowngrade = changeType === "downgrade" || 
+              (existingSubscription && existingSubscription.plan && plan.priceUsd < existingSubscription.plan.priceUsd);
+            
+            if (eventType === "customer.subscription.updated" && isDowngrade && status === "active" && isPlanChange) {
+              // Use targetPlanId from metadata, or fallback to current plan ID
+              const planIdToStore = targetPlanId || plan.id;
+              
+              // Only update if not already set (avoid race conditions)
+              const currentUser = await prisma.user.findUnique({
+                where: { clerkId: user.clerkId },
+                select: { pendingPlanId: true }
+              });
+              
+              if (!currentUser?.pendingPlanId) {
+                await prisma.user.update({
+                  where: { clerkId: user.clerkId },
+                  data: {
+                    pendingPlanId: planIdToStore,
+                  }
+                });
+                console.log(`[WEBHOOK] Downgrade pending: stored plan ${planIdToStore} in pending_plan_id, will finalize at renewal`);
+              } else {
+                console.log(`[WEBHOOK] Downgrade already pending: plan ${currentUser.pendingPlanId} in pending_plan_id`);
+              }
+            }
           } else {
             console.error(`[WEBHOOK] Failed to find subscription plan for price ${priceId}`);
           }
@@ -386,13 +484,56 @@ export async function POST(request: Request) {
             throw new Error(`Failed to find or create subscription plan for price ${priceId}`);
           }
 
-          // Get or create user subscription
+          // Get user with pending_plan_id check
           const user = await prisma.user.findUnique({
-            where: { clerkId: clerkUserId }
+            where: { clerkId: clerkUserId },
+            select: {
+              id: true,
+              pendingPlanId: true,
+            }
           });
 
           if (!user) {
             throw new Error(`User not found: ${clerkUserId}`);
+          }
+
+          // CHECK FOR PENDING DOWNGRADE: Finalize at renewal
+          let finalPlan = plan;
+          let finalPlanCredits = planCredits;
+          const hadPendingDowngrade = !!user.pendingPlanId;
+          
+          if (user.pendingPlanId) {
+            // There's a pending downgrade - finalize it at renewal
+            const pendingPlan = await prisma.subscriptionPlan.findUnique({
+              where: { id: user.pendingPlanId }
+            });
+
+            if (pendingPlan) {
+              // Use the pending plan (lower plan) for credits and entitlements
+              finalPlan = pendingPlan;
+              finalPlanCredits = pendingPlan.creditsPerCycle;
+
+              console.log(`[WEBHOOK] Finalizing downgrade at renewal: granting credits for ${pendingPlan.publicName} (${finalPlanCredits} credits)`);
+
+              // Clear pending_plan_id - downgrade is now finalized
+              await prisma.user.update({
+                where: { clerkId: clerkUserId },
+                data: {
+                  pendingPlanId: null,
+                }
+              });
+
+              console.log(`[WEBHOOK] Downgrade finalized: credits granted for ${pendingPlan.publicName}, pending_plan_id cleared`);
+            } else {
+              console.error(`[WEBHOOK] Pending plan ${user.pendingPlanId} not found, using current plan`);
+              // Clear invalid pending plan ID
+              await prisma.user.update({
+                where: { clerkId: clerkUserId },
+                data: {
+                  pendingPlanId: null,
+                }
+              });
+            }
           }
 
           let userSubscription = await prisma.userSubscription.findUnique({
@@ -405,7 +546,7 @@ export async function POST(request: Request) {
             userSubscription = await prisma.userSubscription.create({
               data: {
                 userId: user.id,
-                planId: plan.id,
+                planId: finalPlan.id,
                 stripeSubscriptionId: subscriptionId,
                 status: subscription.status === "active" ? "ACTIVE" : 
                         subscription.status === "canceled" ? "CANCELED" :
@@ -417,11 +558,12 @@ export async function POST(request: Request) {
               }
             });
           } else {
-            // Update existing subscription
+            // Update existing subscription to use final plan (may be downgraded)
             const subscription = await stripe.subscriptions.retrieve(subscriptionId);
             userSubscription = await prisma.userSubscription.update({
               where: { id: userSubscription.id },
               data: {
+                planId: finalPlan.id,
                 status: subscription.status === "active" ? "ACTIVE" : 
                         subscription.status === "canceled" ? "CANCELED" :
                         subscription.status === "past_due" ? "PAST_DUE" :
@@ -433,28 +575,29 @@ export async function POST(request: Request) {
             });
           }
 
-          // Grant credits with 30-day expiry (subscription cycle)
+          // Grant credits for the final plan (may be downgraded plan)
           const expiresAt = new Date(userSubscription.currentPeriodEnd);
-          expiresAt.setDate(expiresAt.getDate() + plan.creditExpiryDays);
+          expiresAt.setDate(expiresAt.getDate() + finalPlan.creditExpiryDays);
 
           await grantCreditsWithExpiry({
             userId: clerkUserId,
             type: "SUBSCRIPTION",
-            amount: planCredits,
+            amount: finalPlanCredits,
             expiresAt,
-            reason: `Subscription credit grant ${subscriptionId}`,
-            planId: plan.id,
+            reason: `Subscription credit grant ${subscriptionId}${hadPendingDowngrade ? ' (downgrade finalized)' : ''}`,
+            planId: finalPlan.id,
             subscriptionId: userSubscription.id,
             idempotencyKey: `stripe:invoice:${invoice.id}`,
             metadata: {
               stripeInvoiceId: invoice.id,
               stripeSubscriptionId: subscriptionId,
-              planName: plan.publicName,
+              planName: finalPlan.publicName,
               periodEnd: userSubscription.currentPeriodEnd.toISOString(),
+              downgradeFinalized: hadPendingDowngrade,
             }
           });
 
-          console.log(`[WEBHOOK] Subscription credits granted: ${planCredits} credits, expires ${expiresAt.toISOString()}`);
+          console.log(`[WEBHOOK] Subscription credits granted: ${finalPlanCredits} credits for plan ${finalPlan.publicName}, expires ${expiresAt.toISOString()}`);
         } catch (error: any) {
           console.error(`[WEBHOOK] Failed to grant subscription credits with expiry, falling back to old method:`, error);
           // Fallback to old method

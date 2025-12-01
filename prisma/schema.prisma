@@ -17,6 +17,9 @@ model User {
   lastName               String?
   stripeCustomerId       String?
   planId                 Int                  @default(1)
+  // Subscription plan management
+  pendingPlanId          String? // Stores downgrade plan ID until renewal (references SubscriptionPlan.id)
+  entitlementLevel       String? // User entitlement level (if used for feature flags/limits)
   // User roles and permissions
   role                   UserRole             @default(USER)
   isActive               Boolean              @default(true)
