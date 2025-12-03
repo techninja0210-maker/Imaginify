@@ -26,7 +26,7 @@ export interface TrendingProductData {
   displayImageUrl: string
   sales7d: number
   commission: string
-  videoThumbnails: string[]
+  videoThumbnails: string[] | Array<{ url: string; thumbnailUrl: string | null }>
   isFavorite: boolean
   tiktokProductUrl: string
   amazonUrl?: string
@@ -218,8 +218,12 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
         sales7d: stat.tiktokSales7d || 0,
         commission,
         commissionValue, // Add numeric value for filtering
-        // Return video URLs - ProductCard will handle displaying them appropriately
-        videoThumbnails: stat.product.videos.map((video) => video.url),
+        // Return video URLs with optional stored thumbnail URLs
+        // Always return as objects for consistency, with thumbnailUrl null if not stored
+        videoThumbnails: stat.product.videos.map((video) => ({
+          url: video.url,
+          thumbnailUrl: (video as any).thumbnailUrl || null,
+        })),
         isFavorite: favoriteProductIds.includes(stat.product.id),
         tiktokProductUrl: stat.product.tiktokProductUrl,
         amazonUrl: amazonMatch ? amazonProduct?.productUrl || undefined : undefined,

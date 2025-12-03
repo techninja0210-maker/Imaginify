@@ -11,7 +11,7 @@ interface ProductCardProps {
   displayImageUrl: string;
   sales7d: number;
   commission: string;
-  videoThumbnails?: string[];
+  videoThumbnails?: string[] | Array<{ url: string; thumbnailUrl: string | null }>;
   isFavorite?: boolean;
   onFavoriteToggle?: () => void;
 }
@@ -69,68 +69,114 @@ export default function ProductCard({
     return url;
   };
 
-  // Fetch TikTok thumbnails for TikTok video URLs
+  // Process video thumbnails - use stored thumbnails first, fetch if needed
   useEffect(() => {
     if (videoThumbnails.length === 0) return;
 
-    const fetchTikTokThumbnails = async () => {
-      const promises = videoThumbnails.map(async (videoUrl, index) => {
-        // Only fetch if it's a TikTok URL and we haven't already fetched it
-        if (videoUrl?.includes("tiktok.com") && !fetchedRef.current.has(videoUrl)) {
-          fetchedRef.current.add(videoUrl); // Mark as fetching
-          
-          try {
-            const response = await fetch(
-              `/api/tiktok/thumbnail?url=${encodeURIComponent(videoUrl)}`,
-              {
-                // Add timeout to prevent hanging
-                signal: AbortSignal.timeout(10000), // 10 second timeout
-              }
-            );
-            const data = await response.json();
-            
-            // Mark as complete whether we got a thumbnail or not
+    const processThumbnails = async () => {
+      // Normalize videoThumbnails to array of objects with url and optional thumbnailUrl
+      const normalizedVideos = videoThumbnails.map((item) => {
+        if (typeof item === 'string') {
+          return { url: item, thumbnailUrl: null };
+        }
+        return item;
+      });
+
+      // First, set stored thumbnails (if available)
+      normalizedVideos.forEach((video, index) => {
+        if (video.thumbnailUrl) {
+          setTiktokThumbnails((prev) => ({
+            ...prev,
+            [index]: video.thumbnailUrl!,
+          }));
+          setTiktokFetchComplete((prev) => ({
+            ...prev,
+            [index]: true,
+          }));
+        }
+      });
+
+      // Then fetch missing thumbnails for TikTok videos
+      const promises = normalizedVideos.map(async (video, index) => {
+        const videoUrl = video.url;
+        const storedThumbnail = video.thumbnailUrl;
+
+        // Skip if we already have a stored thumbnail or if it's not a TikTok URL
+        if (storedThumbnail || !videoUrl?.includes("tiktok.com")) {
+          if (!storedThumbnail && !videoUrl?.includes("tiktok.com")) {
+            // Mark non-TikTok videos as complete
             setTiktokFetchComplete((prev) => ({
               ...prev,
               [index]: true,
             }));
-            
-            // API returns null on failure - this is expected, no need to log errors
-            if (data.thumbnailUrl) {
-              setTiktokThumbnails((prev) => ({
-                ...prev,
-                [index]: data.thumbnailUrl,
-              }));
-            } else {
-              // No thumbnail available - set to null explicitly to stop loading
-              setTiktokThumbnails((prev) => ({
-                ...prev,
-                [index]: null,
-              }));
+          }
+          return;
+        }
+
+        // Only fetch if we haven't already fetched it
+        if (fetchedRef.current.has(videoUrl)) {
+          return;
+        }
+
+        fetchedRef.current.add(videoUrl); // Mark as fetching
+
+        try {
+          const response = await fetch(
+            `/api/tiktok/thumbnail?url=${encodeURIComponent(videoUrl)}`,
+            {
+              // Add timeout to prevent hanging
+              signal: AbortSignal.timeout(10000), // 10 second timeout
             }
-          } catch (error) {
-            // Mark as complete even on error - stop showing loading
-            setTiktokFetchComplete((prev) => ({
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          // Mark as complete whether we got a thumbnail or not
+          setTiktokFetchComplete((prev) => ({
+            ...prev,
+            [index]: true,
+          }));
+
+          // API returns null on failure - this is expected
+          if (data.thumbnailUrl) {
+            // Successfully fetched thumbnail
+            setTiktokThumbnails((prev) => ({
               ...prev,
-              [index]: true,
+              [index]: data.thumbnailUrl,
             }));
-            // Set thumbnail to null to stop loading indicator
+          } else {
+            // No thumbnail available - set to null explicitly to stop loading
+            // This will show a placeholder instead
             setTiktokThumbnails((prev) => ({
               ...prev,
               [index]: null,
             }));
-            // Silently handle - placeholder will be shown instead
-            // Don't log errors for expected failures
           }
+        } catch (error) {
+          // Mark as complete even on error - stop showing loading
+          setTiktokFetchComplete((prev) => ({
+            ...prev,
+            [index]: true,
+          }));
+          // Set thumbnail to null to stop loading indicator
+          setTiktokThumbnails((prev) => ({
+            ...prev,
+            [index]: null,
+          }));
+          // Silently handle - placeholder will be shown instead
         }
       });
       await Promise.all(promises);
     };
 
-    fetchTikTokThumbnails();
+    processThumbnails();
     // Only re-run if the video URLs actually change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoThumbnails.join(",")]);
+  }, [videoThumbnails.map(v => typeof v === 'string' ? v : v.url).join(",")]);
 
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 flex flex-col">
@@ -202,28 +248,38 @@ export default function ProductCard({
         {videoThumbnails.length > 0 && (
           <div className="flex gap-2">
             {videoThumbnails
-              .filter((url) => url && typeof url === 'string')
               .slice(0, 3)
-              .map((videoUrl, displayIndex) => {
+              .map((item, displayIndex) => {
+              // Normalize to get URL
+              const videoUrl = typeof item === 'string' ? item : item.url;
+              const storedThumbnail = typeof item === 'string' ? null : item.thumbnailUrl;
+              
               // Use the original index in the array for state tracking
-              const originalIndex = videoThumbnails.indexOf(videoUrl);
+              const originalIndex = videoThumbnails.findIndex(v => 
+                (typeof v === 'string' ? v : v.url) === videoUrl
+              );
               const hasError = thumbnailErrors[originalIndex];
               const isTikTokVideo = videoUrl?.includes("tiktok.com");
               const tiktokThumbnail = tiktokThumbnails[originalIndex];
               const isValidImage = isValidImageUrl(videoUrl) && !hasError;
               
               // Determine what to show
+              // Priority: stored thumbnail > fetched thumbnail > direct image URL
               let imageSrc: string | null = null;
               const fetchComplete = tiktokFetchComplete[originalIndex];
               
-              if (isTikTokVideo && tiktokThumbnail) {
-                imageSrc = tiktokThumbnail; // Use fetched TikTok thumbnail
-              } else if (isValidImage && !isTikTokVideo) {
-                imageSrc = getSafeImageUrl(videoUrl); // Use direct image URL
+              if (isTikTokVideo) {
+                // For TikTok videos, use stored thumbnail first, then fetched
+                imageSrc = storedThumbnail || tiktokThumbnail || null;
+              } else if (isValidImage) {
+                imageSrc = getSafeImageUrl(videoUrl); // Use direct image URL for non-TikTok videos
               }
 
               // Show loading only if it's a TikTok video, fetch isn't complete, and we don't have a thumbnail yet
               const shouldShowLoading = isTikTokVideo && !fetchComplete && !tiktokThumbnail && !hasError;
+              
+              // For TikTok videos: show placeholder if fetch is complete but no thumbnail
+              const shouldShowPlaceholder = isTikTokVideo && fetchComplete && !tiktokThumbnail && !hasError;
 
               return (
                 <div

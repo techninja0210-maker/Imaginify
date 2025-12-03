@@ -8,29 +8,29 @@ datasource db {
 }
 
 model User {
-  id                     String               @id @default(cuid())
-  clerkId                String               @unique
-  email                  String               @unique
-  username               String               @unique
+  id                     String                @id @default(cuid())
+  clerkId                String                @unique
+  email                  String                @unique
+  username               String                @unique
   photo                  String
   firstName              String?
   lastName               String?
   stripeCustomerId       String?
-  planId                 Int                  @default(1)
+  planId                 Int                   @default(1)
   // Subscription plan management
   pendingPlanId          String? // Stores downgrade plan ID until renewal (references SubscriptionPlan.id)
   entitlementLevel       String? // User entitlement level (if used for feature flags/limits)
   // User roles and permissions
-  role                   UserRole             @default(USER)
-  isActive               Boolean              @default(true)
+  role                   UserRole              @default(USER)
+  isActive               Boolean               @default(true)
   // User-scoped credits (for personal accounts)
-  creditBalance          Int                  @default(10)
-  lowBalanceThreshold    Int                  @default(5)
-  autoTopUpEnabled       Boolean              @default(false)
+  creditBalance          Int                   @default(10)
+  lowBalanceThreshold    Int                   @default(5)
+  autoTopUpEnabled       Boolean               @default(false)
   autoTopUpAmountCredits Int?
-  creditBalanceVersion   Int                  @default(0)
-  createdAt              DateTime             @default(now())
-  updatedAt              DateTime             @updatedAt
+  creditBalanceVersion   Int                   @default(0)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
   ledger                 CreditLedger[]
   jobQuotes              JobQuote[]
   jobs                   Job[]
@@ -189,13 +189,13 @@ model JobQuote {
 }
 
 model TrendingProduct {
-  id               String               @id @default(cuid())
-  tiktokProductId  String               @unique
+  id               String                @id @default(cuid())
+  tiktokProductId  String                @unique
   name             String
   tiktokProductUrl String
   displayImageUrl  String
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
   weekStats        ProductWeekStat[]
   matches          ProductAmazonMatch[]
   videos           TrendingVideo[]
@@ -379,6 +379,7 @@ model TrendingVideo {
   url            String          @unique
   productId      String
   rankForProduct Int?
+  thumbnailUrl   String? // Store thumbnail URL fetched during import
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   product        TrendingProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
