@@ -291,9 +291,6 @@ async function syncSingleSubscription(
             gte: currentPeriodStart
           }
         },
-        include: {
-          plan: true
-        },
         orderBy: {
           createdAt: 'desc'
         }
@@ -304,10 +301,17 @@ async function syncSingleSubscription(
                           (existingGrantForAnyPlan && existingGrantForAnyPlan.planId !== plan.id);
 
       if (needsCredits) {
-        // This is either a new subscription, renewal, or upgrade/downgrade
-        const isUpgrade = existingGrantForAnyPlan && 
-                         existingGrantForAnyPlan.plan && 
-                         plan.creditsPerCycle > existingGrantForAnyPlan.plan.creditsPerCycle;
+        // Check if this is an upgrade by fetching the old plan if it exists
+        let isUpgrade = false;
+        if (existingGrantForAnyPlan && existingGrantForAnyPlan.planId && existingGrantForAnyPlan.planId !== plan.id) {
+          const oldPlan = await prisma.subscriptionPlan.findUnique({
+            where: { id: existingGrantForAnyPlan.planId },
+            select: { creditsPerCycle: true }
+          });
+          if (oldPlan && plan.creditsPerCycle > oldPlan.creditsPerCycle) {
+            isUpgrade = true;
+          }
+        }
         const isNewOrRenewal = !existingGrantForAnyPlan;
         
         const reason = isUpgrade
