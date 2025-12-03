@@ -170,7 +170,7 @@ export async function GET(req: Request) {
     }
     
     console.log(`[STRIPE_CONFIRM] ✅ Verified user balance after grant: ${newBalance} (was expecting ${(verifyUser?.creditBalance || 0)} + ${credits} = ${(verifyUser?.creditBalance || 0) + credits})`);
-    console.log(`[STRIPE_CONFIRM] Credit result:`, creditResult ? 'success' : 'failed');
+    console.log(`[STRIPE_CONFIRM] ✅ Credit grant completed successfully`);
 
     try {
       await createTransaction({
