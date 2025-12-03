@@ -72,15 +72,22 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ thumbnailUrl });
   } catch (error: any) {
-    // Log errors in production for debugging
-    if (process.env.NODE_ENV === 'production') {
-      const videoUrl = request.nextUrl.searchParams.get("url") || "unknown";
-      console.error(`[TikTok Thumbnail] Error fetching thumbnail for ${videoUrl.substring(0, 50)}...:`, {
+    // Log errors for debugging
+    const videoUrl = request.nextUrl.searchParams.get("url") || "unknown";
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
+    if (process.env.NODE_ENV === 'production' || isDevelopment) {
+      const logData: Record<string, any> = {
         error: error?.message,
         name: error?.name,
-        // Only log stack in development
-        ...(process.env.NODE_ENV === 'development' && { stack: error?.stack }),
-      });
+      };
+      
+      // Only log stack in development
+      if (isDevelopment && error?.stack) {
+        logData.stack = error?.stack;
+      }
+      
+      console.error(`[TikTok Thumbnail] Error fetching thumbnail for ${videoUrl.substring(0, 50)}...:`, logData);
     }
     
     // Return null so placeholder is shown instead
