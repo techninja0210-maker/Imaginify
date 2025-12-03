@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getTrendingProducts, getWeeklyReports, getLatestWeeklyReport } from "@/lib/actions/trending.actions"
+import { getTrendingProducts } from "@/lib/actions/trending.actions"
 import { auth } from "@clerk/nextjs"
 
 export const dynamic = "force-dynamic"
@@ -39,26 +39,6 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: error instanceof Error ? error.message : "Failed to fetch trending products",
-      },
-      { status: 500 }
-    )
-  }
-}
-
-// GET /api/trending/reports - Get weekly reports
-export async function reports() {
-  try {
-    const reports = await getWeeklyReports()
-    return NextResponse.json({
-      success: true,
-      reports,
-    })
-  } catch (error) {
-    console.error("Error fetching weekly reports:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to fetch weekly reports",
       },
       { status: 500 }
     )

@@ -341,7 +341,7 @@ export default function TrendingProductsPage() {
           <div className="flex items-start justify-between bg-white p-6">
     <div>
               <h1 className="text-2xl font-bold text-gray-900">Trending Products</h1>
-              <p className="text-sm text-gray-500 mt-1">Updated weekly based on TikTok's top sellers</p>
+              <p className="text-sm text-gray-500 mt-1">Updated weekly based on TikTok&apos;s top sellers</p>
             </div>
 
             {/* Date Range Selector */}
