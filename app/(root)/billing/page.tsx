@@ -19,6 +19,20 @@ const BillingPage = async () => {
 
   const user = await getUserById(userId);
   if (!user) notFound();
+  
+  // Get effective credit balance (from active grants) for accurate display
+  let userCreditBalance = user.creditBalance || 0;
+  try {
+    const { getActiveCreditGrants } = await import('@/lib/services/credit-grants');
+    const grantSummary = await getActiveCreditGrants(user.id);
+    if (grantSummary.totalAvailable > 0) {
+      userCreditBalance = grantSummary.totalAvailable;
+    }
+  } catch (error) {
+    // Fallback to creditBalance
+    console.error('[BILLING PAGE] Failed to calculate effective balance:', error);
+  }
+  
   let customerId = user.stripeCustomerId ?? null;
 
   // Fetch user with pending plan info

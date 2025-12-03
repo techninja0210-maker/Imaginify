@@ -134,7 +134,23 @@ const Home = async ({
   
   // Get user data if logged in (refresh to get updated balance - force fresh fetch)
   const user = userId ? await getUserById(userId) : null;
-  const credits = user?.creditBalance || 0;
+  
+  // Get effective credit balance (from active grants) if user exists
+  let credits = user?.creditBalance || 0;
+  if (user?.id) {
+    try {
+      const { getActiveCreditGrants } = await import('@/lib/services/credit-grants');
+      const grantSummary = await getActiveCreditGrants(user.id);
+      // Use total available from grants if it's higher than creditBalance (more accurate)
+      // creditBalance should match, but grants are the source of truth
+      if (grantSummary.totalAvailable > 0) {
+        credits = grantSummary.totalAvailable;
+      }
+    } catch (error) {
+      // Fallback to creditBalance if grants calculation fails
+      console.error('[HOME PAGE] Failed to calculate effective balance:', error);
+    }
+  }
   
   // Log current balance for debugging
   if (userId && success && sessionId) {

@@ -29,11 +29,46 @@ export async function POST(request: Request) {
   // Get the ID and type
   const eventType = event.type;
 
-  // One-time top-up checkout
+  // One-time top-up checkout OR subscription checkout
   if (eventType === "checkout.session.completed") {
-    const { id, amount_total, metadata } = event.data.object as any;
-    const customerId = (event.data.object as any).customer as string | null;
+    const session = event.data.object as any;
+    const { id, amount_total, metadata, mode, subscription, customer: customerId } = session;
 
+    // CRITICAL: For subscription mode, link customer ID and wait for customer.subscription.created
+    // This ensures the subscription webhook can find the user
+    if (mode === "subscription") {
+      try {
+        const clerkUserId = metadata?.clerkUserId || metadata?.buyerId;
+        if (clerkUserId && customerId) {
+          // Link customer ID immediately so subscription.created webhook can find the user
+          await prisma.user.update({
+            where: { clerkId: clerkUserId },
+            data: { stripeCustomerId: customerId }
+          });
+          console.log(`[WEBHOOK] Linked customer ${customerId} to user ${clerkUserId} for subscription checkout`);
+        } else {
+          console.warn(`[WEBHOOK] Subscription checkout completed but missing clerkUserId or customerId:`, {
+            clerkUserId,
+            customerId,
+            sessionId: id
+          });
+        }
+      } catch (e: any) {
+        console.error(`[WEBHOOK] Failed to link customer ID for subscription checkout:`, e?.message);
+        // Continue - subscription.created webhook will try to link via email fallback
+      }
+      
+      // For subscriptions, the customer.subscription.created webhook will handle credit grants
+      // Just return success here
+      return NextResponse.json({ 
+        message: "OK", 
+        mode: "subscription",
+        subscriptionId: subscription,
+        note: "Subscription checkout completed, waiting for customer.subscription.created event"
+      });
+    }
+
+    // ONE-TIME PAYMENT HANDLING (mode: "payment")
     const transaction = {
       stripeId: id,
       amount: amount_total ? amount_total / 100 : 0,
@@ -329,6 +364,38 @@ export async function POST(request: Request) {
 
             console.log(`[WEBHOOK] UserSubscription ${eventType === "customer.subscription.created" ? "created" : "updated"}: ${userSubscription.id}, plan: ${plan.publicName}, status: ${subscriptionStatus}`);
 
+            // Grant credits immediately for NEW subscription creation (if active)
+            if (eventType === "customer.subscription.created" && status === "active") {
+              console.log(`[WEBHOOK] New subscription created - granting initial credits for plan ${plan.publicName}`);
+              
+              try {
+                const expiresAt = new Date(userSubscription.currentPeriodEnd);
+                expiresAt.setDate(expiresAt.getDate() + plan.creditExpiryDays);
+
+                await grantCreditsWithExpiry({
+                  userId: user.clerkId,
+                  type: "SUBSCRIPTION",
+                  amount: plan.creditsPerCycle,
+                  expiresAt,
+                  reason: `Initial subscription credit grant for ${plan.publicName}`,
+                  planId: plan.id,
+                  subscriptionId: userSubscription.id,
+                  idempotencyKey: `stripe:subscription:created:${stripeSubscriptionId}`,
+                  metadata: {
+                    stripeSubscriptionId,
+                    planName: plan.publicName,
+                    periodEnd: userSubscription.currentPeriodEnd.toISOString(),
+                    initialGrant: true,
+                  }
+                });
+
+                console.log(`[WEBHOOK] Initial subscription credits granted: ${plan.creditsPerCycle} credits for plan ${plan.publicName}`);
+              } catch (initialGrantError: any) {
+                console.error(`[WEBHOOK] Error granting initial subscription credits:`, initialGrantError);
+                // Don't fail the webhook - invoice.paid will also try to grant credits
+              }
+            }
+
             // Handle IMMEDIATE CANCELLATION: Disable entitlements if canceled immediately
             const isImmediateCancel = status === "canceled" && !subscription.cancel_at_period_end;
             if (isImmediateCancel) {
@@ -345,13 +412,34 @@ export async function POST(request: Request) {
             }
 
             // Handle UPGRADE: Grant full monthly credits immediately (not prorated)
-            // Detect upgrade by metadata or by comparing plan prices
+            // Detect upgrade by metadata or by comparing plan prices or credits
             const isUpgrade = changeType === "upgrade" || 
-              (existingSubscription && existingSubscription.plan && plan.priceUsd > existingSubscription.plan.priceUsd);
+              (existingSubscription && existingSubscription.plan && 
+               (plan.priceUsd > existingSubscription.plan.priceUsd || 
+                plan.creditsPerCycle > existingSubscription.plan.creditsPerCycle));
             const isPlanChange = existingSubscription && existingSubscription.planId !== plan.id;
             
-            if (eventType === "customer.subscription.updated" && isUpgrade && status === "active" && isPlanChange) {
-                console.log(`[WEBHOOK] Processing upgrade: granting full monthly credits for plan ${plan.publicName}`);
+            // Grant credits on upgrade - check if we need to grant credits for the new plan
+            if (eventType === "customer.subscription.updated" && status === "active" && isPlanChange) {
+              // Check if credits were already granted for this new plan period
+              const existingGrantForNewPlan = await prisma.creditGrant.findFirst({
+                where: {
+                  userId: user.id,
+                  subscriptionId: userSubscription.id,
+                  planId: plan.id,
+                  type: "SUBSCRIPTION",
+                  createdAt: {
+                    gte: currentPeriodStart
+                  }
+                }
+              });
+
+              if (!existingGrantForNewPlan) {
+                if (isUpgrade) {
+                  console.log(`[WEBHOOK] Processing upgrade: granting full monthly credits for plan ${plan.publicName} (${plan.creditsPerCycle} credits)`);
+                } else {
+                  console.log(`[WEBHOOK] Plan changed: granting credits for new plan ${plan.publicName} (${plan.creditsPerCycle} credits)`);
+                }
                 
                 try {
                   // Grant full monthly credit allowance immediately
@@ -363,15 +451,19 @@ export async function POST(request: Request) {
                     type: "SUBSCRIPTION",
                     amount: plan.creditsPerCycle,
                     expiresAt,
-                    reason: `Subscription upgrade to ${plan.publicName} - full monthly allowance`,
+                    reason: isUpgrade 
+                      ? `Subscription upgrade to ${plan.publicName} - full monthly allowance`
+                      : `Plan change to ${plan.publicName} - credit grant`,
                     planId: plan.id,
                     subscriptionId: userSubscription.id,
-                    idempotencyKey: `stripe:subscription:upgrade:${stripeSubscriptionId}:${Date.now()}`,
+                    idempotencyKey: `stripe:subscription:${isUpgrade ? 'upgrade' : 'change'}:${stripeSubscriptionId}:${Date.now()}`,
                     metadata: {
                       stripeSubscriptionId,
                       planName: plan.publicName,
-                      changeType: "upgrade",
+                      changeType: isUpgrade ? "upgrade" : "change",
                       fullMonthlyAllowance: true,
+                      oldPlanId: existingSubscription?.planId,
+                      oldPlanName: existingSubscription?.plan.publicName,
                     }
                   });
 
@@ -383,11 +475,20 @@ export async function POST(request: Request) {
                     }
                   });
 
-                  console.log(`[WEBHOOK] Upgrade complete: granted ${plan.creditsPerCycle} credits for plan ${plan.publicName}`);
+                  console.log(`[WEBHOOK] ✅ Plan ${isUpgrade ? 'upgrade' : 'change'} complete: granted ${plan.creditsPerCycle} credits for plan ${plan.publicName}`);
+                  
+                  // Revalidate pages to show updated credits immediately
+                  revalidatePath('/');
+                  revalidatePath('/profile');
+                  revalidatePath('/billing');
+                  revalidatePath('/credits');
                 } catch (upgradeError: any) {
-                  console.error(`[WEBHOOK] Error granting upgrade credits:`, upgradeError);
+                  console.error(`[WEBHOOK] Error granting ${isUpgrade ? 'upgrade' : 'plan change'} credits:`, upgradeError);
                   // Don't fail the webhook, but log the error
                 }
+              } else {
+                console.log(`[WEBHOOK] Credits already granted for plan ${plan.publicName} in this period`);
+              }
             }
 
             // Handle DOWNGRADE: Store in pending_plan_id (already done in changeSubscriptionPlan, but ensure it's set)
@@ -422,12 +523,37 @@ export async function POST(request: Request) {
           }
         } else {
           console.warn(`[WEBHOOK] No price ID found in subscription ${stripeSubscriptionId}`);
+          // Return 200 to avoid retries for missing price ID (likely configuration issue)
         }
       } else {
-        console.warn(`[WEBHOOK] User not found for customer ${customerId}`);
+        console.warn(`[WEBHOOK] User not found for customer ${customerId} - subscription ${stripeSubscriptionId}`);
+        // Return 200 to avoid retries for missing user (they'll need to use admin sync endpoint)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[WEBHOOK] Error handling subscription ${eventType}:`, error);
+      console.error(`[WEBHOOK] Error details:`, {
+        subscriptionId: stripeSubscriptionId || 'unknown',
+        customerId: customerId || 'unknown',
+        errorMessage: error?.message,
+        errorStack: process.env.NODE_ENV === 'development' ? error?.stack : undefined,
+      });
+      // Return 200 for known errors (user not found, price not found) to avoid infinite retries
+      // Only return 500 for unexpected errors that might succeed on retry
+      const isRetriableError = error?.message?.includes('database') || 
+                               error?.message?.includes('connection') ||
+                               !error?.message?.includes('not found');
+      
+      if (isRetriableError) {
+        return NextResponse.json({ 
+          error: `Failed to process subscription ${eventType}: ${error?.message || 'Unknown error'}` 
+        }, { status: 500 });
+      } else {
+        // Non-retriable error (user/plan not found) - return 200 to stop retries
+        return NextResponse.json({ 
+          ok: true,
+          warning: `Subscription ${eventType} skipped: ${error?.message || 'Unknown error'}`
+        });
+      }
     }
     
     return NextResponse.json({ ok: true });
@@ -467,7 +593,8 @@ export async function POST(request: Request) {
       } catch {}
     }
 
-    if (clerkUserId && typeof clerkUserId === 'string' && planCredits > 0) {
+    // Only process subscription invoices (not one-time payments)
+    if (clerkUserId && typeof clerkUserId === 'string' && subscriptionId) {
       // NEW: Use grant system for subscription renewals
       const priceId = invoice.lines?.data?.[0]?.price?.id as string | undefined;
 
@@ -483,6 +610,12 @@ export async function POST(request: Request) {
             throw new Error(`Failed to find or create subscription plan for price ${priceId}`);
           }
 
+          // Use plan.creditsPerCycle as fallback if planCredits from metadata is 0 or missing
+          if (!planCredits || planCredits === 0) {
+            planCredits = plan.creditsPerCycle;
+            console.log(`[WEBHOOK] Using plan.creditsPerCycle (${planCredits}) as fallback since invoice metadata had no credits`);
+          }
+
           // Get user with pending_plan_id check
           const user = await prisma.user.findUnique({
             where: { clerkId: clerkUserId },
@@ -494,6 +627,12 @@ export async function POST(request: Request) {
 
           if (!user) {
             throw new Error(`User not found: ${clerkUserId}`);
+          }
+
+          // Ensure we have valid credits to grant
+          if (planCredits <= 0) {
+            console.error(`[WEBHOOK] Cannot grant credits: planCredits is ${planCredits}, plan.creditsPerCycle is ${plan.creditsPerCycle}`);
+            throw new Error(`Invalid credit amount: planCredits=${planCredits}, plan.creditsPerCycle=${plan.creditsPerCycle}`);
           }
 
           // CHECK FOR PENDING DOWNGRADE: Finalize at renewal
@@ -574,37 +713,78 @@ export async function POST(request: Request) {
             });
           }
 
-          // Grant credits for the final plan (may be downgraded plan)
-          const expiresAt = new Date(userSubscription.currentPeriodEnd);
-          expiresAt.setDate(expiresAt.getDate() + finalPlan.creditExpiryDays);
-
-          await grantCreditsWithExpiry({
-            userId: clerkUserId,
-            type: "SUBSCRIPTION",
-            amount: finalPlanCredits,
-            expiresAt,
-            reason: `Subscription credit grant ${subscriptionId}${hadPendingDowngrade ? ' (downgrade finalized)' : ''}`,
-            planId: finalPlan.id,
-            subscriptionId: userSubscription.id,
-            idempotencyKey: `stripe:invoice:${invoice.id}`,
-            metadata: {
-              stripeInvoiceId: invoice.id,
-              stripeSubscriptionId: subscriptionId,
-              planName: finalPlan.publicName,
-              periodEnd: userSubscription.currentPeriodEnd.toISOString(),
-              downgradeFinalized: hadPendingDowngrade,
+          // Check if credits were already granted for this invoice period
+          // Use the current period start to check for existing grants
+          const existingGrant = await prisma.creditGrant.findFirst({
+            where: {
+              userId: user.id,
+              subscriptionId: userSubscription.id,
+              type: "SUBSCRIPTION",
+              createdAt: {
+                gte: userSubscription.currentPeriodStart
+              }
+            },
+            orderBy: {
+              createdAt: 'desc'
             }
           });
 
-          console.log(`[WEBHOOK] Subscription credits granted: ${finalPlanCredits} credits for plan ${finalPlan.publicName}, expires ${expiresAt.toISOString()}`);
+          // Check idempotency key in ledger
+          const existingLedger = await prisma.creditLedger.findUnique({
+            where: { idempotencyKey: `stripe:invoice:${invoice.id}` }
+          });
+
+          if (existingGrant || existingLedger) {
+            console.log(`[WEBHOOK] Credits already granted for invoice ${invoice.id} (invoice period ${userSubscription.currentPeriodStart.toISOString()})`);
+          } else {
+            // Grant credits for the final plan (may be downgraded plan)
+            const expiresAt = new Date(userSubscription.currentPeriodEnd);
+            expiresAt.setDate(expiresAt.getDate() + finalPlan.creditExpiryDays);
+
+            await grantCreditsWithExpiry({
+              userId: clerkUserId,
+              type: "SUBSCRIPTION",
+              amount: finalPlanCredits,
+              expiresAt,
+              reason: `Subscription renewal credit grant ${subscriptionId}${hadPendingDowngrade ? ' (downgrade finalized)' : ''}`,
+              planId: finalPlan.id,
+              subscriptionId: userSubscription.id,
+              idempotencyKey: `stripe:invoice:${invoice.id}`,
+              metadata: {
+                stripeInvoiceId: invoice.id,
+                stripeSubscriptionId: subscriptionId,
+                planName: finalPlan.publicName,
+                periodEnd: userSubscription.currentPeriodEnd.toISOString(),
+                periodStart: userSubscription.currentPeriodStart.toISOString(),
+                downgradeFinalized: hadPendingDowngrade,
+                isRenewal: true,
+              }
+            });
+
+            console.log(`[WEBHOOK] Subscription renewal credits granted: ${finalPlanCredits} credits for plan ${finalPlan.publicName}, expires ${expiresAt.toISOString()}`);
+          }
+
+          // Revalidate pages to show updated credits immediately
+          revalidatePath('/');
+          revalidatePath('/profile');
+          revalidatePath('/billing');
+          revalidatePath('/credits');
         } catch (error: any) {
           console.error(`[WEBHOOK] Failed to grant subscription credits with expiry, falling back to old method:`, error);
           // Fallback to old method
           await updateCredits(clerkUserId, planCredits, `Subscription credit grant ${subscriptionId}`, `stripe:invoice:${invoice.id}`);
+          revalidatePath('/');
+          revalidatePath('/profile');
+          revalidatePath('/billing');
+          revalidatePath('/credits');
         }
       } else {
         // Fallback to old method if no price ID
         await updateCredits(clerkUserId, planCredits, `Subscription credit grant ${subscriptionId}`, `stripe:invoice:${invoice.id}`);
+        revalidatePath('/');
+        revalidatePath('/profile');
+        revalidatePath('/billing');
+        revalidatePath('/credits');
       }
     }
 
