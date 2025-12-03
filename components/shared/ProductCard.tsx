@@ -45,6 +45,9 @@ export default function ProductCard({
   const [tiktokThumbnails, setTiktokThumbnails] = useState<
     Record<number, string | null>
   >({});
+  const [tiktokFetchComplete, setTiktokFetchComplete] = useState<
+    Record<number, boolean>
+  >({});
   const fetchedRef = useRef<Set<string>>(new Set());
 
   const handleFavoriteClick = () => {
@@ -78,17 +81,44 @@ export default function ProductCard({
           
           try {
             const response = await fetch(
-              `/api/tiktok/thumbnail?url=${encodeURIComponent(videoUrl)}`
+              `/api/tiktok/thumbnail?url=${encodeURIComponent(videoUrl)}`,
+              {
+                // Add timeout to prevent hanging
+                signal: AbortSignal.timeout(10000), // 10 second timeout
+              }
             );
             const data = await response.json();
+            
+            // Mark as complete whether we got a thumbnail or not
+            setTiktokFetchComplete((prev) => ({
+              ...prev,
+              [index]: true,
+            }));
+            
             // API returns null on failure - this is expected, no need to log errors
             if (data.thumbnailUrl) {
               setTiktokThumbnails((prev) => ({
                 ...prev,
                 [index]: data.thumbnailUrl,
               }));
+            } else {
+              // No thumbnail available - set to null explicitly to stop loading
+              setTiktokThumbnails((prev) => ({
+                ...prev,
+                [index]: null,
+              }));
             }
           } catch (error) {
+            // Mark as complete even on error - stop showing loading
+            setTiktokFetchComplete((prev) => ({
+              ...prev,
+              [index]: true,
+            }));
+            // Set thumbnail to null to stop loading indicator
+            setTiktokThumbnails((prev) => ({
+              ...prev,
+              [index]: null,
+            }));
             // Silently handle - placeholder will be shown instead
             // Don't log errors for expected failures
           }
@@ -184,11 +214,16 @@ export default function ProductCard({
               
               // Determine what to show
               let imageSrc: string | null = null;
+              const fetchComplete = tiktokFetchComplete[originalIndex];
+              
               if (isTikTokVideo && tiktokThumbnail) {
                 imageSrc = tiktokThumbnail; // Use fetched TikTok thumbnail
               } else if (isValidImage && !isTikTokVideo) {
                 imageSrc = getSafeImageUrl(videoUrl); // Use direct image URL
               }
+
+              // Show loading only if it's a TikTok video, fetch isn't complete, and we don't have a thumbnail yet
+              const shouldShowLoading = isTikTokVideo && !fetchComplete && !tiktokThumbnail && !hasError;
 
               return (
                 <div
@@ -215,6 +250,10 @@ export default function ProductCard({
                             ...prev,
                             [originalIndex]: null,
                           }));
+                          setTiktokFetchComplete((prev) => ({
+                            ...prev,
+                            [originalIndex]: true,
+                          }));
                         }
                       }}
                       unoptimized={true} // TikTok thumbnails need to be unoptimized
@@ -223,7 +262,7 @@ export default function ProductCard({
                     /* Show loading or placeholder while fetching or if no thumbnail */
                     <div className="w-full h-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center">
                       <div className="text-center">
-                        {isTikTokVideo && !tiktokThumbnail && !hasError ? (
+                        {shouldShowLoading ? (
                           <>
                             <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
                             <span className="text-xs text-white/80 font-medium">Loading...</span>
