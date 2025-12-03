@@ -22,6 +22,10 @@ const ManualCreditGrant = dynamicImport(() => import("@/components/shared/Manual
   loading: () => null
 })
 
+const LandingPage = dynamicImport(() => import("./LandingPage").then(mod => ({ default: mod.default })), { 
+  ssr: false
+})
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2023-10-16",
 })
@@ -394,29 +398,8 @@ const Home = async ({
           </div>
         </div>
       ) : (
-        // Marketing view for visitors
-        <section className="min-h-[60vh] flex flex-col items-center justify-center text-center px-6 py-16">
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-            Unleash Your Creative Vision
-          </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl">
-            Transform your images with AI-powered editing tools. Restore, enhance, and create stunning visuals.
-          </p>
-          <div className="flex gap-4">
-            <Link 
-              href="/pricing" 
-              className="px-8 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors shadow-lg"
-            >
-              See Pricing
-            </Link>
-            <Link 
-              href="/sign-in" 
-              className="px-8 py-3 bg-white text-purple-600 font-semibold rounded-lg border-2 border-purple-600 hover:bg-purple-50 transition-colors"
-            >
-              Get Started
-            </Link>
-          </div>
-        </section>
+        // Minimal landing page with centered logo
+        <LandingPage />
       )}
     </div>
   )

@@ -40,6 +40,7 @@ model User {
   creditGrants           CreditGrant[]
   subscriptions          UserSubscription[]
   topUpPurchases         TopUpPurchase[]
+  favoriteProducts       UserFavoriteProduct[]
 
   @@map("users")
 }
@@ -198,6 +199,7 @@ model TrendingProduct {
   weekStats        ProductWeekStat[]
   matches          ProductAmazonMatch[]
   videos           TrendingVideo[]
+  favoritedBy      UserFavoriteProduct[]
 
   @@map("products")
 }
@@ -404,6 +406,19 @@ model TrendingImportLog {
   uploader      User?         @relation(fields: [uploaderId], references: [id])
 
   @@map("import_logs")
+}
+
+model UserFavoriteProduct {
+  id        String          @id @default(cuid())
+  userId    String
+  productId String
+  createdAt DateTime        @default(now())
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   TrendingProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("user_favorite_products")
 }
 
 enum ImportStatus {

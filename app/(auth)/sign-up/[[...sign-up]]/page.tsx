@@ -4,18 +4,23 @@ import Link from "next/link";
 const SIGNUP_ACCESS_TOKEN = process.env.SIGNUP_ACCESS_TOKEN;
 
 interface SignUpPageProps {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };
 }
 
-const SignUpPage = ({ searchParams }: SignUpPageProps) => {
-  if (SIGNUP_ACCESS_TOKEN) {
+const SignUpPage = async ({ searchParams }: SignUpPageProps) => {
+  // Handle both Promise and direct object for searchParams (Next.js 15+ compatibility)
+  const params = searchParams instanceof Promise ? await searchParams : searchParams;
+  
+  // Check if token protection is enabled
+  if (SIGNUP_ACCESS_TOKEN && SIGNUP_ACCESS_TOKEN.trim() !== '') {
     const providedToken = (() => {
-      const raw = searchParams?.token ?? searchParams?.invite ?? searchParams?.access;
+      const raw = params?.token ?? params?.invite ?? params?.access;
       if (Array.isArray(raw)) return raw[0];
       return raw;
     })();
 
-    if (providedToken !== SIGNUP_ACCESS_TOKEN) {
+    // If no token provided or token doesn't match, block access
+    if (!providedToken || providedToken !== SIGNUP_ACCESS_TOKEN) {
       return (
         <div className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center gap-6 px-6 text-center">
           <div className="space-y-3">

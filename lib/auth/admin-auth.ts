@@ -7,13 +7,13 @@ export async function requireAdmin() {
   const { userId } = auth();
   
   if (!userId) {
-    redirect("/sign-in");
+    redirect("/sign-in?redirect_url=/admin");
   }
 
   const user = await getUserById(userId);
   
   if (!user) {
-    redirect("/sign-in");
+    redirect("/sign-in?redirect_url=/admin");
   }
 
   if (!canAccessAdmin(user.role)) {

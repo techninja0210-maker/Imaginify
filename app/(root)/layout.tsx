@@ -22,7 +22,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <Link href="/legal/terms">Terms</Link>
               <Link href="/legal/privacy">Privacy</Link>
             </div>
-            <span>© {new Date().getFullYear()} Imaginify</span>
+            <span>© {new Date().getFullYear()} Shoppable Videos</span>
           </div>
         </footer>
       </div>
