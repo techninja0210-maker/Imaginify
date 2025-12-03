@@ -18,6 +18,11 @@ const Credits = async () => {
     redirect("/sign-in");
   }
 
+  // Use raw creditBalance as the source of truth (includes all credits, including legacy grants)
+  // Note: Credits page uses CreditBreakdown component which fetches its own data from /api/me/credits-breakdown
+  // This calculation is here for consistency but may not be used if CreditBreakdown is displayed
+  const effectiveBalance = user.creditBalance || 0;
+
   // Enhance plans with value calculations and badges
   const enhancedPlans = plans.map((plan, index) => {
     const pricePerCredit = plan.price > 0 ? plan.price / plan.credits : 0;

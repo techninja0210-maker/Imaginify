@@ -20,16 +20,18 @@ const BillingPage = async () => {
   const user = await getUserById(userId);
   if (!user) notFound();
   
-  // Get effective credit balance (from active grants) for accurate display
+  // Use raw creditBalance as the source of truth (includes all credits, including legacy grants)
+  // The effective balance from grants may not include credits granted before the grant system was implemented
+  // We use creditBalance as primary, and if grants show a higher value, use that (to catch any missed grants)
   let userCreditBalance = user.creditBalance || 0;
   try {
     const { getActiveCreditGrants } = await import('@/lib/services/credit-grants');
     const grantSummary = await getActiveCreditGrants(user.id);
-    if (grantSummary.totalAvailable > 0) {
-      userCreditBalance = grantSummary.totalAvailable;
-    }
+    // Use the higher value: either creditBalance (includes legacy) or grants total (if higher)
+    // This ensures we show the most accurate balance while handling migration from old system
+    userCreditBalance = Math.max(userCreditBalance, grantSummary.totalAvailable);
   } catch (error) {
-    // Fallback to creditBalance
+    // Fallback to creditBalance if grants calculation fails
     console.error('[BILLING PAGE] Failed to calculate effective balance:', error);
   }
   

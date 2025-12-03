@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { prisma } from '@/lib/database/prisma';
 import { updateCredits } from '@/lib/actions/user.actions';
+import { grantCreditsWithExpiry } from '@/lib/actions/credit-grant-with-expiry';
+import { findOrCreateTopUpPlan } from '@/lib/services/stripe-plans';
 import { createTransaction } from '@/lib/actions/transaction.action';
 import { revalidatePath } from 'next/cache';
 
@@ -63,32 +65,91 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: true, skipped: true, reason: 'Already processed' });
     }
 
-    // Grant credits and record transaction
+    // Grant credits using the grant system (consistent with webhook)
     console.log(`[STRIPE_CONFIRM] ✅ Starting credit grant: buyerId=${buyerId}, credits=${credits}, idemKey=${idemKey}`);
     
-    let creditResult;
     try {
-      creditResult = await updateCredits(buyerId, credits, `Checkout confirmation ${session.id}`, idemKey);
-      console.log(`[STRIPE_CONFIRM] updateCredits returned:`, creditResult ? 'success' : 'null/undefined');
-      
-      if (creditResult) {
-        console.log(`[STRIPE_CONFIRM] Credit result details:`, {
-          creditBalance: (creditResult as any)?.creditBalance,
-          id: (creditResult as any)?.id
-        });
+      // Try to use grant system for top-ups (get price ID from session)
+      const sessionWithItems = await stripe.checkout.sessions.retrieve(session.id, {
+        expand: ['line_items']
+      });
+      const priceId = sessionWithItems.line_items?.data?.[0]?.price?.id as string | undefined;
+
+      if (priceId) {
+        // Use grant system for top-ups
+        try {
+          const planResult = await findOrCreateTopUpPlan(priceId);
+          const plan = await prisma.topUpPlan.findUnique({
+            where: { id: planResult.id }
+          });
+
+          if (plan) {
+            const user = await prisma.user.findUnique({
+              where: { clerkId: buyerId }
+            });
+
+            if (!user) {
+              throw new Error(`User not found: ${buyerId}`);
+            }
+
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + plan.creditExpiryDays);
+
+            // Create top-up purchase record
+            const topUpPurchase = await prisma.topUpPurchase.create({
+              data: {
+                userId: user.id,
+                planId: plan.id,
+                stripeSessionId: session.id,
+                amount: amount,
+                creditsGranted: credits,
+                expiresAt,
+              }
+            });
+
+            // Grant credits with expiry
+            await grantCreditsWithExpiry({
+              userId: buyerId,
+              type: "TOPUP",
+              amount: credits,
+              expiresAt,
+              reason: `Top-up purchase ${session.id}`,
+              planId: plan.id,
+              topUpPurchaseId: topUpPurchase.id,
+              idempotencyKey: idemKey,
+              metadata: {
+                stripeSessionId: session.id,
+                planName: plan.publicName,
+              }
+            });
+
+            console.log(`[STRIPE_CONFIRM] ✅ Top-up credits granted with expiry: ${credits} credits, expires ${expiresAt.toISOString()}`);
+          } else {
+            throw new Error(`Failed to find top-up plan for price ${priceId}`);
+          }
+        } catch (grantError: any) {
+          console.warn(`[STRIPE_CONFIRM] Grant system failed, falling back to updateCredits:`, grantError?.message);
+          // Fallback to old method if grant system fails
+          const creditResult = await updateCredits(buyerId, credits, `Checkout confirmation ${session.id}`, idemKey);
+          if (!creditResult) {
+            throw new Error('updateCredits returned null/undefined');
+          }
+        }
+      } else {
+        // No price ID - use old method as fallback
+        console.log(`[STRIPE_CONFIRM] No price ID found, using updateCredits fallback`);
+        const creditResult = await updateCredits(buyerId, credits, `Checkout confirmation ${session.id}`, idemKey);
+        if (!creditResult) {
+          throw new Error('updateCredits returned null/undefined');
+        }
       }
     } catch (creditError: any) {
-      console.error(`[STRIPE_CONFIRM] ❌ updateCredits threw error:`, creditError?.message || creditError);
+      console.error(`[STRIPE_CONFIRM] ❌ Credit grant failed:`, creditError?.message || creditError);
       return NextResponse.json({ 
         error: 'Failed to update credits', 
         details: creditError?.message,
         stack: process.env.NODE_ENV === 'development' ? creditError.stack : undefined
       }, { status: 500 });
-    }
-    
-    if (!creditResult) {
-      console.error(`[STRIPE_CONFIRM] ❌ updateCredits returned null/undefined`);
-      return NextResponse.json({ error: 'Failed to update credits - function returned null' }, { status: 500 });
     }
 
     // Verify credits were actually updated
@@ -97,7 +158,16 @@ export async function GET(req: Request) {
       select: { creditBalance: true }
     });
     
-    const newBalance = verifyUser?.creditBalance || (creditResult as any)?.creditBalance || null;
+    // Get effective balance from grants for accurate display
+    let newBalance = verifyUser?.creditBalance || 0;
+    try {
+      const { getActiveCreditGrants } = await import('@/lib/services/credit-grants');
+      const grantSummary = await getActiveCreditGrants(userExists.id);
+      newBalance = grantSummary.totalAvailable;
+    } catch (error) {
+      // Fallback to creditBalance
+      console.warn('[STRIPE_CONFIRM] Failed to get effective balance, using creditBalance');
+    }
     
     console.log(`[STRIPE_CONFIRM] ✅ Verified user balance after grant: ${newBalance} (was expecting ${(verifyUser?.creditBalance || 0)} + ${credits} = ${(verifyUser?.creditBalance || 0) + credits})`);
     console.log(`[STRIPE_CONFIRM] Credit result:`, creditResult ? 'success' : 'failed');

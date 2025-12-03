@@ -7,7 +7,9 @@ import Link from 'next/link'
 import { UserButton, useUser } from '@clerk/nextjs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Search, TrendingUp, TrendingDown, Heart, Bell } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetHeader } from '@/components/ui/sheet'
+import { Search, TrendingUp, TrendingDown, Heart, Bell, Filter, X } from 'lucide-react'
 import ProductCard from '@/components/shared/ProductCard'
 import { format } from 'date-fns'
 
@@ -56,6 +58,15 @@ export default function TrendingProductsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<'rank' | 'trending-up' | 'trending-down'>('rank')
   const [favoritesOnly, setFavoritesOnly] = useState(false)
+  
+  // Mobile filter modal state
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  // Temporary filter state for modal (applied on "Apply")
+  const [tempPlatform, setTempPlatform] = useState<'tiktok' | 'amazon' | null>(null)
+  const [tempCategory, setTempCategory] = useState<string>('all')
+  const [tempCommissionRange, setTempCommissionRange] = useState<string>('all')
+  const [tempSalesRange, setTempSalesRange] = useState<string>('all')
+  const [tempSortBy, setTempSortBy] = useState<'rank' | 'trending-up' | 'trending-down'>('rank')
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -305,7 +316,7 @@ export default function TrendingProductsPage() {
       className="fixed inset-0 flex flex-col bg-white overflow-auto w-screen h-screen z-[99999]"
     >
       <div className="flex-1 overflow-auto">
-        <div className="max-w-7xl px-8 mx-auto">
+        <div className="max-w-7xl px-4 sm:px-8 mx-auto">
           {/* Top Navigation Bar */}
           <header className="w-full bg-white px-6">
             <div className="flex items-center justify-between">
@@ -338,17 +349,17 @@ export default function TrendingProductsPage() {
           </header>
 
           {/* Page Header Section */}
-          <div className="flex items-start justify-between bg-white p-6">
-    <div>
+          <div className="flex items-start justify-between bg-white px-4 sm:px-6 py-4 sm:py-6">
+            <div>
               <h1 className="text-2xl font-bold text-gray-900">Trending Products</h1>
               <p className="text-sm text-gray-500 mt-1">Updated weekly based on TikTok&apos;s top sellers</p>
             </div>
 
-            {/* Date Range Selector */}
+            {/* Date Range Selector - Hidden on mobile */}
             {reportsError ? (
-              <div className="text-sm text-red-600">{reportsError}</div>
+              <div className="text-sm text-red-600 hidden sm:block">{reportsError}</div>
             ) : reports.length === 0 ? (
-              <div className="text-sm text-gray-500">No reports available</div>
+              <div className="text-sm text-gray-500 hidden sm:block">No reports available</div>
             ) : (
               <Select 
                 value={selectedReportId && selectedReportId.trim() !== '' ? selectedReportId : undefined} 
@@ -358,7 +369,7 @@ export default function TrendingProductsPage() {
                   }
                 }}
               >
-                <SelectTrigger className="w-[180px] h-9 bg-white rounded-xl border border-gray-200 pt-[14px] pr-4 pb-3 pl-4 text-sm font-medium text-gray-900 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 hover:border-gray-300">
+                <SelectTrigger className="hidden sm:flex w-[180px] h-9 bg-white rounded-xl border border-gray-200 pt-[14px] pr-4 pb-3 pl-4 text-sm font-medium text-gray-900 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 hover:border-gray-300">
                   <SelectValue placeholder="Select date range" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border border-gray-200 bg-white shadow-lg mt-1 z-[100000]">
@@ -374,8 +385,103 @@ export default function TrendingProductsPage() {
             )}
           </div>
 
-          {/* Filter Bar Section */}
-          <div className="px-6 space-y-4">
+          {/* Mobile: Platform Toggle, Date Range, and Filter Buttons */}
+          <div className="px-4 sm:hidden space-y-3 mb-4">
+            {/* Platform Selection Toggle - Mobile */}
+            <div className="flex flex-row items-start p-1 gap-[10px] w-full h-9 bg-[#F5F6F7] border border-[#ECECEC] rounded-xl">
+              <button
+                onClick={() => setPlatform(platform === 'tiktok' ? null : 'tiktok')}
+                className={`flex flex-col justify-center items-center cursor-pointer px-[14px] py-[6px] gap-[10px] flex-1 h-7 shadow-[0px_1px_3px_rgba(0,0,0,0.05)] rounded-[10px] border-none transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${
+                  platform === 'tiktok'
+                    ? 'bg-white'
+                    : 'bg-transparent hover:bg-white/50'
+                }`}
+              >
+                <div className="flex flex-row items-center p-0 gap-[6px]">
+                  <i className="fab fa-tiktok text-[17px] text-black" aria-hidden="true"></i>
+                  <span className="text-sm font-medium text-black whitespace-nowrap">TikTok</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setPlatform(platform === 'amazon' ? null : 'amazon')}
+                className={`flex flex-col justify-center items-center cursor-pointer px-[14px] py-[6px] gap-[10px] flex-1 h-7 shadow-[0px_1px_3px_rgba(0,0,0,0.05)] rounded-[10px] border-none transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${
+                  platform === 'amazon'
+                    ? 'bg-white'
+                    : 'bg-transparent hover:bg-white/50'
+                }`}
+              >
+                <div className="flex flex-row items-center p-0 gap-[6px]">
+                  <i className="fab fa-amazon text-[17px] text-[#FF9900]" aria-hidden="true"></i>
+                  <span className="text-sm font-medium text-black whitespace-nowrap">Amazon</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Date Range and Action Buttons Row */}
+            <div className="flex items-center gap-3">
+              {/* Date Range Selector - Mobile */}
+              {!reportsError && reports.length > 0 && (
+                <Select 
+                  value={selectedReportId && selectedReportId.trim() !== '' ? selectedReportId : undefined} 
+                  onValueChange={(value) => {
+                    if (value && value.trim() !== '') {
+                      setSelectedReportId(value)
+                    }
+                  }}
+                >
+                  <SelectTrigger className="flex-1 h-10 bg-white rounded-xl border border-gray-200 pt-[14px] pr-4 pb-3 pl-4 text-sm font-medium text-gray-900 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
+                    <SelectValue placeholder="Select date range" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border border-gray-200 bg-white shadow-lg mt-1 z-[100000]">
+                    {reports
+                      .filter((report) => report.id && report.id.trim() !== '')
+                      .map((report) => (
+                        <SelectItem key={report.id} value={report.id}>
+                          {report.label || `Report ${report.id}`}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              )}
+              
+              {/* Favorites Only Button - Mobile */}
+              <button
+                onClick={() => {
+                  setFavoritesOnly(!favoritesOnly)
+                }}
+                className={`h-10 w-10 rounded-xl border flex items-center justify-center transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${
+                  favoritesOnly
+                    ? 'bg-red-50 border-red-200 text-red-900'
+                    : 'bg-white border-gray-200 text-gray-900'
+                }`}
+              >
+                <Heart className={`w-5 h-5 ${favoritesOnly ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
+              </button>
+              
+              {/* Filter Button - Mobile */}
+              <button
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  // Sync current filter values to temp state when opening
+                  setTempPlatform(platform)
+                  setTempCategory(category)
+                  setTempCommissionRange(commissionRange)
+                  setTempSalesRange(salesRange)
+                  setTempSortBy(sortBy)
+                  setIsFilterOpen(true)
+                }}
+                className="h-10 px-4 rounded-xl border border-gray-200 bg-white flex items-center gap-2 text-sm font-medium text-gray-900 hover:border-gray-300 transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
+              >
+                <Filter className="w-4 h-4" />
+                <span>Filters</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Bar Section - Desktop */}
+          <div className="hidden sm:block px-6 space-y-4">
             {/* Top Row: Platform, Dropdowns, Search */}
             <div className="flex flex-wrap items-center gap-3">
               {/* Platform Selection Toggle */}
@@ -511,6 +617,204 @@ export default function TrendingProductsPage() {
             </div>
           </div>
 
+          {/* Mobile Filter Modal */}
+          {isMounted && (
+            <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+              <SheetContent 
+                side="bottom" 
+                className="h-[90vh] rounded-t-2xl p-0 flex flex-col max-w-full sm:hidden z-[100001] [&>button]:hidden"
+              >
+              <SheetHeader className="px-6 pt-6 pb-4 border-b relative">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
+                  <button
+                    onClick={() => setIsFilterOpen(false)}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
+                  >
+                    <X className="w-5 h-5 text-gray-600" />
+                  </button>
+                </div>
+              </SheetHeader>
+              
+              <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
+                  <Input
+                    type="search"
+                    placeholder="Search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-10 bg-white rounded-xl border border-gray-200 pr-4 pl-10 text-sm font-medium text-gray-900 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 hover:border-gray-300 placeholder:text-gray-400"
+                  />
+                </div>
+
+                {/* Platform Selection Toggle - Mobile */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">Platform</label>
+                  <div className="flex flex-row items-start p-1 gap-[10px] w-full h-9 bg-[#F5F6F7] border border-[#ECECEC] rounded-xl">
+                    <button
+                      onClick={() => setTempPlatform(tempPlatform === 'tiktok' ? null : 'tiktok')}
+                      className={`flex flex-col justify-center items-start cursor-pointer px-[14px] py-[6px] gap-[10px] flex-1 h-7 shadow-[0px_1px_3px_rgba(0,0,0,0.05)] rounded-[10px] border-none transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${
+                        tempPlatform === 'tiktok'
+                          ? 'bg-white'
+                          : 'bg-transparent hover:bg-white/50'
+                      }`}
+                    >
+                      <div className="flex flex-row items-center p-0 gap-[6px]">
+                        <i className="fab fa-tiktok text-[17px] text-black" aria-hidden="true"></i>
+                        <span className="text-sm font-medium text-black whitespace-nowrap">TikTok</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => setTempPlatform(tempPlatform === 'amazon' ? null : 'amazon')}
+                      className={`flex flex-col justify-center items-start cursor-pointer px-[14px] py-[6px] gap-[10px] flex-1 h-7 shadow-[0px_1px_3px_rgba(0,0,0,0.05)] rounded-[10px] border-none transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${
+                        tempPlatform === 'amazon'
+                          ? 'bg-white'
+                          : 'bg-transparent hover:bg-white/50'
+                      }`}
+                    >
+                      <div className="flex flex-row items-center p-0 gap-[6px]">
+                        <i className="fab fa-amazon text-[17px] text-[#FF9900]" aria-hidden="true"></i>
+                        <span className="text-sm font-medium text-black whitespace-nowrap">Amazon</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Category Dropdown */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">Category</label>
+                  <Select value={tempCategory} onValueChange={(value) => {
+                    console.log('[FILTER MODAL] Category changed to:', value)
+                    setTempCategory(value)
+                  }}>
+                    <SelectTrigger className="w-full h-10 bg-white rounded-xl border border-gray-200 text-sm font-medium text-gray-900 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border border-gray-200 bg-white shadow-lg z-[100002]">
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories
+                        .filter((cat) => cat && cat.trim() !== '')
+                        .map((cat) => (
+                          <SelectItem key={cat} value={cat}>
+                            {cat}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Commission Rate Dropdown */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">Commission Rate</label>
+                  <Select value={tempCommissionRange} onValueChange={(value) => {
+                    console.log('[FILTER MODAL] Commission range changed to:', value)
+                    setTempCommissionRange(value)
+                  }}>
+                    <SelectTrigger className="w-full h-10 bg-white rounded-xl border border-gray-200 text-sm font-medium text-gray-900 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
+                      <SelectValue placeholder="Commission Rate" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border border-gray-200 bg-white shadow-lg z-[100002]">
+                      <SelectItem value="all">All Rates</SelectItem>
+                      <SelectItem value="0-5">0% - 5%</SelectItem>
+                      <SelectItem value="5-10">5% - 10%</SelectItem>
+                      <SelectItem value="10-15">10% - 15%</SelectItem>
+                      <SelectItem value="15-20">15% - 20%</SelectItem>
+                      <SelectItem value="20-100">20%+</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* TikTok 7-Day Sales Dropdown */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">Tik Tok-7 Days Sale</label>
+                  <Select value={tempSalesRange} onValueChange={(value) => {
+                    console.log('[FILTER MODAL] Sales range changed to:', value)
+                    setTempSalesRange(value)
+                  }}>
+                    <SelectTrigger className="w-full h-10 bg-white rounded-xl border border-gray-200 text-sm font-medium text-gray-900 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
+                      <SelectValue placeholder="Tik Tok-7 Days Sale" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border border-gray-200 bg-white shadow-lg z-[100002]">
+                      <SelectItem value="all">All Sales</SelectItem>
+                      <SelectItem value="0-1000">0 - 1,000</SelectItem>
+                      <SelectItem value="1000-5000">1,000 - 5,000</SelectItem>
+                      <SelectItem value="5000-10000">5,000 - 10,000</SelectItem>
+                      <SelectItem value="10000-50000">10,000 - 50,000</SelectItem>
+                      <SelectItem value="50000-999999999">50,000+</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Trending Up/Down Buttons */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setTempSortBy(tempSortBy === 'trending-up' ? 'rank' : 'trending-up')}
+                    className={`flex-1 h-10 rounded-xl border pt-[14px] pr-4 pb-3 pl-4 flex items-center justify-between gap-2 text-sm font-medium transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${
+                      tempSortBy === 'trending-up'
+                        ? 'bg-blue-50 border-blue-200 text-blue-900'
+                        : 'bg-white border-gray-200 text-gray-900 hover:border-gray-300'
+                    }`}
+                  >
+                    <span>Trending Up</span>
+                    <TrendingUp className="w-4 h-4" />
+                  </button>
+                  
+                  <button
+                    onClick={() => setTempSortBy(tempSortBy === 'trending-down' ? 'rank' : 'trending-down')}
+                    className={`flex-1 h-10 rounded-xl border pt-[14px] pr-4 pb-3 pl-4 flex items-center justify-between gap-2 text-sm font-medium transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${
+                      tempSortBy === 'trending-down'
+                        ? 'bg-blue-50 border-blue-200 text-blue-900'
+                        : 'bg-white border-gray-200 text-gray-900 hover:border-gray-300'
+                    }`}
+                  >
+                    <span>Trending Down</span>
+                    <TrendingDown className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Apply/Reset Buttons */}
+              <div className="px-6 pb-6 pt-4 border-t flex gap-3">
+                <Button
+                  onClick={() => {
+                    setPlatform(tempPlatform)
+                    setCategory(tempCategory)
+                    setCommissionRange(tempCommissionRange)
+                    setSalesRange(tempSalesRange)
+                    setSortBy(tempSortBy)
+                    setIsFilterOpen(false)
+                  }}
+                  className="flex-1 h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium"
+                >
+                  Apply
+                </Button>
+                <Button
+                  onClick={() => {
+                    setTempPlatform(null)
+                    setTempCategory('all')
+                    setTempCommissionRange('all')
+                    setTempSalesRange('all')
+                    setTempSortBy('rank')
+                    setPlatform(null)
+                    setCategory('all')
+                    setCommissionRange('all')
+                    setSalesRange('all')
+                    setSortBy('rank')
+                    setIsFilterOpen(false)
+                  }}
+                  variant="outline"
+                  className="flex-1 h-11 border-gray-200 text-gray-900 rounded-xl font-medium hover:bg-gray-50"
+                >
+                  Reset
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+          )}
+
           {/* Product Grid Section */}
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -518,7 +822,7 @@ export default function TrendingProductsPage() {
             </div>
           )}
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-8 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mt-4 sm:mt-8 mb-8 px-4 sm:px-0">
             {loading ? (
               // Loading skeleton
               Array.from({ length: 8 }).map((_, index) => (

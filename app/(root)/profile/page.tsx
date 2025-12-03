@@ -31,6 +31,8 @@ const Profile = async ({ searchParams }: SearchParamProps) => {
       }) 
     : [];
 
+  // Use raw creditBalance as the source of truth (includes all credits, including legacy grants)
+  // The effective balance from grants may not include credits granted before the grant system was implemented
   const userBalance = user.creditBalance || 0;
   const orgBalance = user.organizationMembers?.[0]?.organization?.credits?.balance || 0;
   const isOutOfSync = userBalance !== orgBalance;

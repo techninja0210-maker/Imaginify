@@ -135,7 +135,7 @@ export default function ProductCard({
   return (
     <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 flex flex-col">
       {/* Top Section: Rank, Favorite, Main Image */}
-      <div className="p-4">
+      <div className="p-5 sm:p-4">
         {/* Rank Badge */}
         <div className="flex items-center justify-between rounded-lg">
           <span className="text-sm font-semibold text-gray-900">#{rank}</span>
@@ -178,7 +178,7 @@ export default function ProductCard({
       </div>
 
       {/* Product Details Section */}
-      <div className="p-4 space-y-3">
+      <div className="px-5 pt-4 pb-4 sm:p-4 space-y-3">
         {/* Product Title */}
         <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 leading-tight">
           {productName}
@@ -296,15 +296,15 @@ export default function ProductCard({
       </div>
 
       {/* Action Buttons Section */}
-      <div className="p-4 pt-0 flex gap-2">
+      <div className="px-5 pb-5 pt-0 sm:p-4 sm:pt-0 flex flex-col sm:flex-row gap-2">
         {/* TikTok Remix Button */}
-        <button className="flex-1 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center gap-2 transition-colors">
+        <button className="w-full sm:flex-1 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center gap-2 transition-colors">
           <i className="fab fa-tiktok text-white"></i>
           <span className="text-sm font-medium">Remix</span>
         </button>
 
         {/* Amazon Video Button */}
-        <button className="flex-1 h-10 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg flex items-center justify-center gap-2 transition-colors">
+        <button className="w-full sm:flex-1 h-10 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg flex items-center justify-center gap-2 transition-colors">
           <i className="fab fa-amazon text-[#FF9900]"></i>
           <span className="text-sm font-medium">Video</span>
         </button>
