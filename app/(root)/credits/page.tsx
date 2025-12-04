@@ -5,7 +5,23 @@ import { getUserById } from "@/lib/actions/user.actions";
 import Checkout from "@/components/shared/Checkout";
 import { Button } from "@/components/ui/button";
 import { Check, X, Sparkles, Zap, Crown } from "lucide-react";
-import { CreditBreakdown } from "@/components/shared/CreditBreakdown";
+import dynamicImport from "next/dynamic";
+
+// Dynamically import client component to avoid SSR issues with hooks
+const CreditBreakdown = dynamicImport(
+  () => import("@/components/shared/CreditBreakdown").then((mod) => ({ default: mod.CreditBreakdown })),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="space-y-4">
+        <div className="animate-pulse space-y-4">
+          <div className="h-16 bg-gray-100 rounded"></div>
+          <div className="h-24 bg-gray-100 rounded"></div>
+        </div>
+      </div>
+    )
+  }
+);
 
 const Credits = async () => {
   const { userId } = auth();

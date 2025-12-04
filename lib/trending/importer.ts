@@ -13,6 +13,7 @@ import {
   toIsoDate,
 } from "./utils";
 import { prisma } from "@/lib/database/prisma";
+import { fetchTikTokThumbnail } from "./fetch-thumbnail";
 
 interface ImportCounters {
   rowsProcessed: number;
@@ -348,15 +349,47 @@ export async function importTrendingProducts({
       }
 
       if (topVideoUrls.length) {
+        // Fetch thumbnails for TikTok videos and store them
+        const videosWithThumbnails = await Promise.all(
+          topVideoUrls.map(async (url, idx) => {
+            let thumbnailUrl: string | null = null;
+            
+            // Only fetch thumbnail for TikTok videos
+            if (url.includes("tiktok.com")) {
+              try {
+                thumbnailUrl = await fetchTikTokThumbnail(url);
+                // Add a small delay to avoid rate limiting (100ms between requests)
+                if (idx < topVideoUrls.length - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                }
+              } catch (error) {
+                // Silently fail - thumbnail fetching is optional
+                console.warn(`[IMPORT] Failed to fetch thumbnail for ${url.substring(0, 50)}...`);
+              }
+            }
+
+            return {
+              url,
+              rankForProduct: idx + 1,
+              thumbnailUrl,
+            };
+          })
+        );
+
         await prisma.$transaction(
-          topVideoUrls.map((url, idx) =>
+          videosWithThumbnails.map((video) =>
             prisma.trendingVideo.upsert({
-              where: { url },
-              update: { productId, rankForProduct: idx + 1 },
+              where: { url: video.url },
+              update: { 
+                productId, 
+                rankForProduct: video.rankForProduct,
+                thumbnailUrl: video.thumbnailUrl || undefined, // Only update if we got a thumbnail
+              },
               create: {
-                url,
+                url: video.url,
                 productId,
-                rankForProduct: idx + 1,
+                rankForProduct: video.rankForProduct,
+                thumbnailUrl: video.thumbnailUrl,
               },
             })
           )

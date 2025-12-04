@@ -84,12 +84,12 @@ export async function POST() {
     const resend = new Resend(process.env.RESEND_API_KEY);
     
     await resend.emails.send({
-      from: 'Imaginify <noreply@yourdomain.com>',
+      from: 'Shoppable Videos <noreply@yourdomain.com>',
       to: user.email,
       subject: `Low Credit Balance Alert - ${userBalance} credits remaining`,
       html: `
         <h1>Low Credit Balance Alert</h1>
-        <p>Your Imaginify account balance is currently <strong>${userBalance} credits</strong>, which is below your threshold of <strong>${threshold} credits</strong>.</p>
+        <p>Your Shoppable Videos account balance is currently <strong>${userBalance} credits</strong>, which is below your threshold of <strong>${threshold} credits</strong>.</p>
         <p><a href="${process.env.NEXT_PUBLIC_SERVER_URL || 'https://yourdomain.com'}/credits">Buy More Credits</a></p>
       `,
     });

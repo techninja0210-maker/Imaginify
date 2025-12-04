@@ -7,7 +7,23 @@ import { notFound, redirect } from "next/navigation";
 import Stripe from "stripe";
 import Link from "next/link";
 import { CreditCard, Calendar, Coins, TrendingUp, Settings, ShoppingBag, FileText, Download, ArrowUp, ArrowDown, Check } from "lucide-react";
-import { CreditBreakdown } from "@/components/shared/CreditBreakdown";
+import dynamicImport from "next/dynamic";
+
+// Dynamically import client component to avoid SSR issues with hooks
+const CreditBreakdown = dynamicImport(
+  () => import("@/components/shared/CreditBreakdown").then((mod) => ({ default: mod.CreditBreakdown })),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="space-y-4">
+        <div className="animate-pulse space-y-4">
+          <div className="h-16 bg-gray-100 rounded"></div>
+          <div className="h-24 bg-gray-100 rounded"></div>
+        </div>
+      </div>
+    )
+  }
+);
 
 // Force dynamic rendering to ensure fresh credit data
 export const dynamic = 'force-dynamic';

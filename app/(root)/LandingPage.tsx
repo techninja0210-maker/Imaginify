@@ -63,7 +63,7 @@ export default function LandingPage() {
         </div>
 
         {/* Waitlist Text and Link */}
-        <div className="text-center">
+        <div className="text-center space-y-4">
           <p className="text-lg sm:text-xl md:text-2xl text-gray-900 font-medium mb-2">
             Join the waitlist by completing{' '}
             <a
@@ -73,6 +73,18 @@ export default function LandingPage() {
               className="text-blue-700 hover:text-blue-800 underline font-semibold transition-colors"
             >
               this form
+            </a>
+          </p>
+          
+          {/* Skool Group Link */}
+          <p className="text-lg sm:text-xl md:text-2xl text-gray-900 font-medium">
+            <a
+              href="https://tinyurl.com/shoppablevideos"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-700 hover:text-blue-800 underline font-semibold transition-colors"
+            >
+              Keep up to date in the Skool Group
             </a>
           </p>
         </div>

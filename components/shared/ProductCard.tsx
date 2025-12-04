@@ -20,11 +20,43 @@ interface ProductCardProps {
 function isValidImageUrl(url: string | undefined | null): boolean {
   if (!url) return false;
   if (url.startsWith("/")) return true; // Local path
-  if (url.includes("tiktok.com")) return false; // TikTok URLs are videos, not images
-  if (url.includes("amazon.com")) return true; // Amazon URLs might be images
+  
+  // Reject TikTok video URLs (but allow TikTok image CDN URLs if they exist)
+  if (url.includes("tiktok.com") && !url.includes("image") && !url.includes("thumbnail")) {
+    return false; // TikTok video URLs are not images
+  }
+  
+  // Accept Amazon image URLs (they often don't have extensions)
+  if (url.includes("amazon.com") || url.includes("media-amazon.com")) {
+    return true;
+  }
+  
+  // Accept common image CDN patterns
+  if (url.includes("cdn") || url.includes("images") || url.includes("img")) {
+    // Check if it looks like an image URL (has image-related path segments)
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.includes("/image") || lowerUrl.includes("/img") || lowerUrl.includes("/photo") || lowerUrl.includes("/picture")) {
+      return true;
+    }
+  }
+  
   // Check for common image extensions
-  const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"];
-  return imageExtensions.some((ext) => url.toLowerCase().includes(ext));
+  const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp", ".ico"];
+  if (imageExtensions.some((ext) => url.toLowerCase().includes(ext))) {
+    return true;
+  }
+  
+  // If URL starts with http/https and doesn't match known non-image patterns, allow it
+  // This is more permissive but handles edge cases
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    // Reject known non-image patterns
+    const nonImagePatterns = ["/video/", "/watch", "youtube.com", "vimeo.com"];
+    if (!nonImagePatterns.some(pattern => url.toLowerCase().includes(pattern))) {
+      return true; // Assume it's an image if it's a valid HTTP URL
+    }
+  }
+  
+  return false;
 }
 
 export default function ProductCard({
@@ -209,15 +241,27 @@ export default function ProductCard({
               fill
               className="object-cover"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
-              onError={() => setImageError(true)}
+              onError={(e) => {
+                console.warn(`[ProductCard] Failed to load image: ${displayImageUrl}`);
+                setImageError(true);
+              }}
+              onLoad={() => {
+                // Reset error state if image loads successfully
+                if (imageError) setImageError(false);
+              }}
               unoptimized={
                 displayImageUrl?.includes("amazon.com") ||
+                displayImageUrl?.includes("media-amazon.com") ||
                 displayImageUrl?.includes("tiktok.com")
               }
             />
           ) : (
             <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-              <span className="text-gray-400 text-sm">No Image</span>
+              <span className="text-gray-400 text-sm">
+                {displayImageUrl && !isValidImageUrl(displayImageUrl) 
+                  ? "Invalid Image URL" 
+                  : "No Image"}
+              </span>
             </div>
           )}
         </div>

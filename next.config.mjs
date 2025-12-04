@@ -14,6 +14,16 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: '**.media-amazon.com',
+        port: ''
+      },
+      {
+        protocol: 'https',
+        hostname: 'm.media-amazon.com',
+        port: ''
+      },
+      {
+        protocol: 'https',
         hostname: '**.amazonaws.com',
         port: ''
       },
