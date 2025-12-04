@@ -11,6 +11,9 @@ const SignUpPage = async ({ searchParams }: SignUpPageProps) => {
   // Handle both Promise and direct object for searchParams (Next.js 15+ compatibility)
   const params = searchParams instanceof Promise ? await searchParams : searchParams;
   
+  // Token protection is DISABLED to allow open sign-ups
+  // To re-enable token protection, uncomment the code below and set SIGNUP_ACCESS_TOKEN env variable
+  /*
   // Check if token protection is enabled
   if (SIGNUP_ACCESS_TOKEN && SIGNUP_ACCESS_TOKEN.trim() !== '') {
     const providedToken = (() => {
@@ -40,6 +43,7 @@ const SignUpPage = async ({ searchParams }: SignUpPageProps) => {
       );
     }
   }
+  */
 
   return <SignUp />;
 };

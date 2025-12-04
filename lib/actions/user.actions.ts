@@ -12,12 +12,45 @@ export async function createUser(user: CreateUserParams) {
   try {
     // Validate Gmail-only sign-in at the function level as well
     requireGmailEmail(user.email, "user creation");
+    
+    // Handle username conflicts - if username already exists, append random suffix
+    let finalUsername = user.username;
+    let attempt = 0;
+    const maxAttempts = 10;
+    
+    while (attempt < maxAttempts) {
+      const existingUser = await prisma.user.findUnique({
+        where: { username: finalUsername },
+        select: { id: true }
+      });
+      
+      if (!existingUser) {
+        break; // Username is available
+      }
+      
+      // Username exists, try with suffix
+      attempt++;
+      const suffix = attempt > 1 ? `${attempt}` : Math.random().toString(36).slice(2, 6);
+      finalUsername = `${user.username}_${suffix}`;
+    }
+    
+    if (attempt >= maxAttempts) {
+      throw new Error(`Failed to generate unique username after ${maxAttempts} attempts`);
+    }
+    
+    // Generate organization name
+    const orgName = user.firstName || user.lastName
+      ? `${user.firstName || ''} ${user.lastName || ''}`.trim() + "'s Organization"
+      : user.username 
+        ? `${user.username}'s Organization`
+        : "User's Organization";
+    
     // Create user with organization and initial credit balance
     const newUser = await prisma.user.create({
       data: {
         clerkId: user.clerkId,
         email: user.email,
-        username: user.username,
+        username: finalUsername,
         photo: user.photo,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -27,7 +60,7 @@ export async function createUser(user: CreateUserParams) {
             organization: {
               create: {
                 clerkId: `org_${user.clerkId}`,
-                name: `${user.firstName} ${user.lastName}'s Organization`,
+                name: orgName,
                 credits: {
                   create: {
                     balance: 10 // Default starting credits
