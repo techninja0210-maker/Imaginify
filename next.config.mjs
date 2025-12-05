@@ -57,6 +57,21 @@ const nextConfig = {
         hostname: '**.akamaized.net',
         port: '',
         pathname: '/**/tiktokcdn-com/**'
+      },
+      {
+        protocol: 'https',
+        hostname: 'www.tiktok.com',
+        port: ''
+      },
+      {
+        protocol: 'https',
+        hostname: 'tiktok.com',
+        port: ''
+      },
+      {
+        protocol: 'https',
+        hostname: '**.tiktok.com',
+        port: ''
       }
     ],
     // Allow unoptimized images for external domains that might not support optimization

@@ -42,15 +42,65 @@ const Profile = async ({ searchParams }: SearchParamProps) => {
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Manage your account and view your activity
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
+              <p className="mt-1 text-sm text-gray-500">
+                Manage your account and view your activity
+              </p>
+            </div>
+            <Link
+              href="/profile/edit"
+              className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+            >
+              Edit Profile
+            </Link>
+          </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* User Info Card */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+          <div className="px-6 py-5 border-b border-gray-200 bg-gray-50">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+              Personal Information
+            </h2>
+          </div>
+          <div className="p-6">
+            <div className="flex items-center gap-6">
+              <div className="relative w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-4 border-gray-200">
+                <Image
+                  src={user.photo}
+                  alt={user.firstName || user.username}
+                  fill
+                  className="object-cover"
+                  unoptimized={user.photo?.includes('dicebear.com') || user.photo?.includes('clerk.com')}
+                />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {user.firstName && user.firstName !== 'User' && user.lastName && user.lastName !== 'Name'
+                    ? `${user.firstName} ${user.lastName}`
+                    : user.firstName === 'User' && user.lastName === 'Name'
+                    ? user.username
+                    : `${user.firstName || 'User'} ${user.lastName || 'Name'}`}
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">{user.email}</p>
+                <p className="text-xs text-gray-400 mt-1">@{user.username}</p>
+                {(user.firstName === 'User' || user.lastName === 'Name') && (
+                  <p className="text-xs text-purple-600 mt-2">
+                    <Link href="/profile/edit" className="hover:underline">
+                      Update your name to personalize your profile
+                    </Link>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Top Section - Credits & Activity */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Credits Available Card */}

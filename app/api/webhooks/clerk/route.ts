@@ -154,8 +154,9 @@ export async function POST(req: Request) {
       clerkId: id,
       email: primaryEmail,
       username: generatedUsername,
-      firstName: first_name || null,
-      lastName: last_name || null,
+      // Set default values "User" and "Name" if first_name/last_name are not provided
+      firstName: first_name || 'User',
+      lastName: last_name || 'Name',
       photo: userPhoto,
     };
 

@@ -165,6 +165,98 @@ export default function TrendingProductsPage() {
     fetchReports()
   }, [])
 
+  // Save scroll position and filters before navigating away
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      sessionStorage.setItem('trending_scroll_position', window.scrollY.toString())
+      sessionStorage.setItem('trending_filters', JSON.stringify({
+        selectedReportId,
+        platform,
+        category,
+        commissionRange,
+        salesRange,
+        searchQuery,
+        sortBy,
+        favoritesOnly
+      }))
+    }
+
+    // Save scroll position periodically while scrolling
+    const handleScroll = () => {
+      sessionStorage.setItem('trending_scroll_position', window.scrollY.toString())
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [selectedReportId, platform, category, commissionRange, salesRange, searchQuery, sortBy, favoritesOnly])
+
+  // Restore scroll position and filters when returning to page (only on mount)
+  useEffect(() => {
+    const returnTimestamp = sessionStorage.getItem('trending_return_timestamp')
+    const savedFilters = sessionStorage.getItem('trending_filters')
+
+    // Only restore if we're returning from navigation (has timestamp within last 10 seconds)
+    if (!returnTimestamp) return
+    const timeDiff = Date.now() - parseInt(returnTimestamp, 10)
+    if (timeDiff > 10000) {
+      // Clear stale data
+      sessionStorage.removeItem('trending_return_timestamp')
+      sessionStorage.removeItem('trending_scroll_position')
+      sessionStorage.removeItem('trending_filters')
+      return
+    }
+
+    // Restore filters immediately
+    if (savedFilters) {
+      try {
+        const filters = JSON.parse(savedFilters)
+        if (filters.selectedReportId) setSelectedReportId(filters.selectedReportId)
+        if (filters.platform !== undefined) setPlatform(filters.platform)
+        if (filters.category) setCategory(filters.category)
+        if (filters.commissionRange) setCommissionRange(filters.commissionRange)
+        if (filters.salesRange) setSalesRange(filters.salesRange)
+        if (filters.searchQuery !== undefined) setSearchQuery(filters.searchQuery)
+        if (filters.sortBy) setSortBy(filters.sortBy)
+        if (filters.favoritesOnly !== undefined) setFavoritesOnly(filters.favoritesOnly)
+      } catch (e) {
+        console.warn('Failed to restore filters:', e)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run on mount - intentionally ignoring deps
+
+  // Additional scroll restoration after products load
+  useEffect(() => {
+    if (!loading && products.length > 0) {
+      const savedScrollPosition = sessionStorage.getItem('trending_scroll_position')
+      const returnTimestamp = sessionStorage.getItem('trending_return_timestamp')
+      
+      if (savedScrollPosition && returnTimestamp) {
+        const scrollPosition = parseInt(savedScrollPosition, 10)
+        const timeDiff = Date.now() - parseInt(returnTimestamp, 10)
+        
+        // Only restore if we returned within the last 5 seconds
+        if (timeDiff < 5000) {
+          const scrollTimer = setTimeout(() => {
+            window.scrollTo({
+              top: scrollPosition,
+              behavior: 'instant'
+            })
+            sessionStorage.removeItem('trending_scroll_position')
+            sessionStorage.removeItem('trending_return_timestamp')
+          }, 100)
+          
+          return () => clearTimeout(scrollTimer)
+        }
+      }
+    }
+  }, [loading, products.length])
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {

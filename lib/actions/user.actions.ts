@@ -137,9 +137,10 @@ export async function getUserById(userId: string) {
         clerkId: clerkUser.id,
         email: email,
         username: clerkUser.username || `user_${clerkUser.id.slice(0, 8)}`,
+        // Set default values "User" and "Name" if not provided
         firstName: clerkUser.firstName || 'User',
         lastName: clerkUser.lastName || 'Name',
-        photo: clerkUser.imageUrl,
+        photo: clerkUser.imageUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${Buffer.from(email.toLowerCase()).toString('base64').slice(0, 10)}`,
       };
 
       user = await createUser(newUserData as any);

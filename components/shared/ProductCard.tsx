@@ -1,8 +1,10 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { Heart, TrendingUp, Play } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
+import { extractTikTokVideoId } from "@/lib/utils/tiktok-thumbnail";
 
 interface ProductCardProps {
   rank: number;
@@ -103,7 +105,14 @@ export default function ProductCard({
 
   // Process video thumbnails - use stored thumbnails first, fetch if needed
   useEffect(() => {
-    if (videoThumbnails.length === 0) return;
+    console.log('[ProductCard] videoThumbnails prop:', videoThumbnails);
+    
+    if (!videoThumbnails || videoThumbnails.length === 0) {
+      console.log('[ProductCard] No video thumbnails to process for product:', productName);
+      return;
+    }
+
+    console.log('[ProductCard] Processing', videoThumbnails.length, 'video thumbnails for product:', productName);
 
     const processThumbnails = async () => {
       // Normalize videoThumbnails to array of objects with url and optional thumbnailUrl
@@ -288,12 +297,14 @@ export default function ProductCard({
           </span>
         </div>
 
-        {/* Video Thumbnails Section */}
-        {videoThumbnails.length > 0 && (
-          <div className="flex gap-2">
-            {videoThumbnails
-              .slice(0, 3)
-              .map((item, displayIndex) => {
+        {/* Video Thumbnails Section - ALWAYS VISIBLE */}
+        {/* Client requirement: "Each product shows up to 3 TikTok thumbnails" */}
+        <div className="w-full">
+          <div className="flex gap-2 w-full">
+            {videoThumbnails && videoThumbnails.length > 0 ? (
+              videoThumbnails
+                .slice(0, 3)
+                .map((item, displayIndex) => {
               // Normalize to get URL
               const videoUrl = typeof item === 'string' ? item : item.url;
               const storedThumbnail = typeof item === 'string' ? null : item.thumbnailUrl;
@@ -314,7 +325,19 @@ export default function ProductCard({
               
               if (isTikTokVideo) {
                 // For TikTok videos, use stored thumbnail first, then fetched
-                imageSrc = storedThumbnail || tiktokThumbnail || null;
+                // IMPORTANT: Only use actual image URLs, never use video URLs
+                const thumbnail = storedThumbnail || tiktokThumbnail;
+                if (thumbnail && isValidImageUrl(thumbnail)) {
+                  // Make sure thumbnail URL is a real image URL, not a video URL
+                  if (!thumbnail.includes('/video/') && !thumbnail.includes('#thumbnail')) {
+                    imageSrc = thumbnail;
+                  } else {
+                    console.warn(`[ProductCard] Invalid thumbnail URL (video URL detected): ${thumbnail}`);
+                    imageSrc = null;
+                  }
+                } else {
+                  imageSrc = null;
+                }
               } else if (isValidImage) {
                 imageSrc = getSafeImageUrl(videoUrl); // Use direct image URL for non-TikTok videos
               }
@@ -325,11 +348,15 @@ export default function ProductCard({
               // For TikTok videos: show placeholder if fetch is complete but no thumbnail
               const shouldShowPlaceholder = isTikTokVideo && fetchComplete && !tiktokThumbnail && !hasError;
 
-              return (
+              // Extract TikTok video ID for routing
+              const tiktokVideoId = isTikTokVideo ? extractTikTokVideoId(videoUrl) : null;
+              const videoLink = tiktokVideoId ? `/tiktok/${tiktokVideoId}` : null;
+
+              // Create the thumbnail container
+              const thumbnailContent = (
                 <div
-                  key={`${originalIndex}-${videoUrl}`}
-                  className="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-200 flex-1 group cursor-pointer"
-                  title={videoUrl}
+                  className="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-200 flex-1 group cursor-pointer min-w-[80px]"
+                  title={videoUrl || 'Video thumbnail'}
                 >
                   {/* Show thumbnail image if available */}
                   {imageSrc ? (
@@ -339,7 +366,8 @@ export default function ProductCard({
                       fill
                       className="object-cover"
                       sizes="(max-width: 768px) 33vw, 100px"
-                      onError={() => {
+                      onError={(e) => {
+                        console.warn(`[ProductCard] Failed to load thumbnail for video ${displayIndex + 1}:`, imageSrc);
                         setThumbnailErrors((prev) => ({
                           ...prev,
                           [originalIndex]: true,
@@ -355,6 +383,9 @@ export default function ProductCard({
                             [originalIndex]: true,
                           }));
                         }
+                      }}
+                      onLoad={() => {
+                        console.log(`[ProductCard] Successfully loaded thumbnail for video ${displayIndex + 1}`);
                       }}
                       unoptimized={true} // TikTok thumbnails need to be unoptimized
                     />
@@ -390,9 +421,40 @@ export default function ProductCard({
                   </div>
                 </div>
               );
-            })}
+
+              // Wrap in Link if it's a TikTok video, otherwise just return the div
+              if (videoLink) {
+                return (
+                  <Link key={`${originalIndex}-${videoUrl}`} href={videoLink}>
+                    {thumbnailContent}
+                  </Link>
+                );
+              }
+
+              return (
+                <div key={`${originalIndex}-${videoUrl}`}>
+                  {thumbnailContent}
+                </div>
+              );
+                })
+            ) : (
+              // Show placeholder when no videos are available - ensure it's always visible
+              <div className="w-full flex gap-2">
+                {[1, 2, 3].map((num) => (
+                  <div 
+                    key={num}
+                    className="flex-1 aspect-square rounded-lg bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 min-h-[80px]"
+                  >
+                    <div className="text-center">
+                      <Play className="w-6 h-6 text-gray-400 mx-auto mb-1" />
+                      <p className="text-xs text-gray-500">No video</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Action Buttons Section */}

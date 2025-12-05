@@ -4,6 +4,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide Clerk branding badge - Multiple selectors to catch all variations */
+[data-clerk-element="cl-branding"],
+.cl-branding,
+[class*="cl-branding"],
+[class*="branding"],
+/* Hide the vertical "Secured by Clerk" badge on sign-in/sign-up cards */
+.cl-card::before,
+[class*="cl-card"]::before,
+.cl-cardBox::before,
+/* Target the actual badge element */
+[class*="cl-rootBox"] > [class*="cl-badge"],
+/* Hide if it's a sibling or child */
+[class*="cl-card"] + [class*="cl-branding"],
+[class*="cl-card"] [class*="cl-branding"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  height: 0 !important;
+  width: 0 !important;
+  overflow: hidden !important;
+  content: none !important;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

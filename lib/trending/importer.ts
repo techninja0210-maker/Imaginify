@@ -207,10 +207,11 @@ export async function importTrendingProducts({
         where: { tiktokProductId },
       });
 
+      // Don't create fake thumbnail URLs - only use real image URLs or fetched thumbnails
       const imageSelection = selectDisplayImage({
         currentUrl: existingProduct?.displayImageUrl,
         amazonImageUrl: amazonImage || undefined,
-        tiktokThumbnailUrl: topVideoUrls.length ? `${topVideoUrls[0]}#thumbnail` : undefined,
+        tiktokThumbnailUrl: undefined, // Will be set later from fetched thumbnails if available
       });
 
       counters.imageSources[imageSelection.source] += 1;

@@ -45,7 +45,28 @@ const SignUpPage = async ({ searchParams }: SignUpPageProps) => {
   }
   */
 
-  return <SignUp />;
+  return (
+    <SignUp
+      appearance={{
+        elements: {
+          headerTitle: 'Shoppable Videos',
+          headerSubtitle: 'Create your account',
+          socialButtonsBlockButton: 'Continue with Google',
+          socialButtonsBlockButtonText: 'Continue with Google',
+          // Ensure username field is visible
+          formFieldInput__username: {
+            placeholder: 'Choose a username',
+          },
+        },
+        variables: {
+          colorPrimary: '#624cf5',
+        },
+      }}
+      // Enable username field in sign-up flow
+      // Note: This requires username to be enabled in Clerk Dashboard
+      // Path: User & Authentication → Username → Enable "Sign-up with username"
+    />
+  );
 };
 
 export default SignUpPage;

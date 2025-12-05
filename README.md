@@ -157,6 +157,9 @@ CRON_SECRET=your-cron-secret
 
 # Amazon Product Ingestion API (Internal use only)
 AMAZON_INGEST_API_KEY=your-amazon-ingest-api-key-here
+
+# TikTok Processor Integration (v1)
+NEXT_PUBLIC_TIKTOK_PROCESSOR_URL=https://your-tiktok-processor-domain.com
 ```
 
 ### How to Obtain Credentials
