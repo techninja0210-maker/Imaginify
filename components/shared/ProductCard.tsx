@@ -16,6 +16,7 @@ interface ProductCardProps {
   videoThumbnails?: string[] | Array<{ url: string; thumbnailUrl: string | null }>;
   isFavorite?: boolean;
   onFavoriteToggle?: () => void;
+  amazonUrl?: string;
 }
 
 // Helper function to check if URL is a valid image URL
@@ -70,6 +71,7 @@ export default function ProductCard({
   videoThumbnails = [],
   isFavorite = false,
   onFavoriteToggle,
+  amazonUrl,
 }: ProductCardProps) {
   const [isFav, setIsFav] = useState(isFavorite);
   const [imageError, setImageError] = useState(false);
@@ -159,10 +161,10 @@ export default function ProductCard({
           return;
         }
 
-        fetchedRef.current.add(videoUrl); // Mark as fetching
-
-        try {
-          const response = await fetch(
+          fetchedRef.current.add(videoUrl); // Mark as fetching
+          
+          try {
+            const response = await fetch(
             `/api/tiktok/thumbnail?url=${encodeURIComponent(videoUrl)}`,
             {
               // Add timeout to prevent hanging
@@ -174,7 +176,7 @@ export default function ProductCard({
             throw new Error(`HTTP ${response.status}`);
           }
 
-          const data = await response.json();
+            const data = await response.json();
 
           // Mark as complete whether we got a thumbnail or not
           setTiktokFetchComplete((prev) => ({
@@ -183,21 +185,21 @@ export default function ProductCard({
           }));
 
           // API returns null on failure - this is expected
-          if (data.thumbnailUrl) {
+            if (data.thumbnailUrl) {
             // Successfully fetched thumbnail
-            setTiktokThumbnails((prev) => ({
-              ...prev,
-              [index]: data.thumbnailUrl,
-            }));
+              setTiktokThumbnails((prev) => ({
+                ...prev,
+                [index]: data.thumbnailUrl,
+              }));
           } else {
             // No thumbnail available - set to null explicitly to stop loading
             // This will show a placeholder instead
             setTiktokThumbnails((prev) => ({
               ...prev,
               [index]: null,
-            }));
-          }
-        } catch (error) {
+              }));
+            }
+          } catch (error) {
           // Mark as complete even on error - stop showing loading
           setTiktokFetchComplete((prev) => ({
             ...prev,
@@ -208,7 +210,7 @@ export default function ProductCard({
             ...prev,
             [index]: null,
           }));
-          // Silently handle - placeholder will be shown instead
+            // Silently handle - placeholder will be shown instead
         }
       });
       await Promise.all(promises);
@@ -303,7 +305,7 @@ export default function ProductCard({
           <div className="flex gap-2 w-full">
             {videoThumbnails && videoThumbnails.length > 0 ? (
               videoThumbnails
-                .slice(0, 3)
+              .slice(0, 3)
                 .map((item, displayIndex) => {
               // Normalize to get URL
               const videoUrl = typeof item === 'string' ? item : item.url;
@@ -458,17 +460,24 @@ export default function ProductCard({
       </div>
 
       {/* Action Buttons Section */}
-      <div className="px-5 pb-5 pt-0 sm:p-4 sm:pt-0 flex flex-col sm:flex-row gap-2">
-        {/* TikTok Remix Button */}
-        <button className="w-full sm:flex-1 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center gap-2 transition-colors">
-          <i className="fab fa-tiktok text-white"></i>
-          <span className="text-sm font-medium">Remix</span>
-        </button>
-
+      {/* Removed Remix button per v1 requirements - users should click video thumbnails instead */}
+      <div className="px-5 pb-5 pt-0 sm:p-4 sm:pt-0">
         {/* Amazon Video Button */}
-        <button className="w-full sm:flex-1 h-10 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg flex items-center justify-center gap-2 transition-colors">
+        <button
+          onClick={() => {
+            if (amazonUrl) {
+              window.open(amazonUrl, '_blank');
+            }
+          }}
+          disabled={!amazonUrl}
+          className={`w-full h-10 rounded-lg flex items-center justify-center gap-2 transition-colors ${
+            amazonUrl
+              ? 'bg-gray-100 hover:bg-gray-200 text-gray-900 cursor-pointer'
+              : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+          }`}
+        >
           <i className="fab fa-amazon text-[#FF9900]"></i>
-          <span className="text-sm font-medium">Video</span>
+          <span className="text-sm font-medium">View on Amazon</span>
         </button>
       </div>
     </div>

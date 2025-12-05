@@ -944,6 +944,7 @@ export default function TrendingProductsPage() {
                   videoThumbnails={Array.isArray(product.videoThumbnails) ? product.videoThumbnails : []}
                   isFavorite={product.isFavorite || false}
                   onFavoriteToggle={() => handleFavoriteToggle(product.productId, product.isFavorite)}
+                  amazonUrl={product.amazonUrl}
                 />
               ))
             ) : (

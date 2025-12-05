@@ -58,15 +58,8 @@ export default function TikTokDetailPage() {
   const [thumbnailError, setThumbnailError] = useState(false);
   const [thumbnailLoading, setThumbnailLoading] = useState(true);
 
-  // Hide sidebar and other layout elements (same as trending page)
+  // Hide sidebar and other layout elements immediately
   useEffect(() => {
-    setIsMounted(true);
-
-    const portalContainer = document.createElement("div");
-    portalContainer.setAttribute("data-tiktok-detail-portal", "true");
-    document.body.appendChild(portalContainer);
-    setPortalElement(portalContainer);
-
     const hideLayoutElements = () => {
       const sidebar = document.querySelector("aside.sidebar");
       const mobileNav = document.querySelector("header.header");
@@ -75,30 +68,45 @@ export default function TikTokDetailPage() {
       const wrapper = document.querySelector(".root-container .wrapper");
 
       if (sidebar instanceof HTMLElement) {
-        sidebar.style.cssText += "display: none !important;";
+        sidebar.style.cssText = "display: none !important;";
       }
       if (mobileNav instanceof HTMLElement) {
-        mobileNav.style.cssText += "display: none !important;";
+        mobileNav.style.cssText = "display: none !important;";
       }
       if (footer instanceof HTMLElement) {
-        footer.style.cssText += "display: none !important;";
+        footer.style.cssText = "display: none !important;";
       }
       if (lowBalanceBanner instanceof HTMLElement) {
-        lowBalanceBanner.style.cssText += "display: none !important;";
+        lowBalanceBanner.style.cssText = "display: none !important;";
       }
       if (wrapper instanceof HTMLElement) {
-        wrapper.style.cssText += "display: none !important;";
+        wrapper.style.cssText = "display: none !important;";
       }
 
       document.body.style.overflow = "auto";
       document.documentElement.style.overflow = "auto";
     };
 
+    // Hide immediately
     hideLayoutElements();
-    const timeoutId = setTimeout(hideLayoutElements, 100);
+    
+    // Also hide after a short delay to catch any late-rendering elements
+    const timeout1 = setTimeout(hideLayoutElements, 0);
+    const timeout2 = setTimeout(hideLayoutElements, 100);
+    const timeout3 = setTimeout(hideLayoutElements, 300);
+
+    // Set up portal
+    setIsMounted(true);
+    const portalContainer = document.createElement("div");
+    portalContainer.setAttribute("data-tiktok-detail-portal", "true");
+    document.body.appendChild(portalContainer);
+    setPortalElement(portalContainer);
 
     return () => {
-      clearTimeout(timeoutId);
+      clearTimeout(timeout1);
+      clearTimeout(timeout2);
+      clearTimeout(timeout3);
+      
       const sidebar = document.querySelector("aside.sidebar");
       const mobileNav = document.querySelector("header.header");
       const footer = document.querySelector("footer");
@@ -595,8 +603,53 @@ export default function TikTokDetailPage() {
     </div>
   );
 
+  // Hide sidebar immediately on initial render
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const hideElements = () => {
+      const sidebar = document.querySelector("aside.sidebar");
+      const mobileNav = document.querySelector("header.header");
+      const footer = document.querySelector("footer");
+      const lowBalanceBanner = document.querySelector('[class*="LowBalanceBanner"]');
+      const wrapper = document.querySelector(".root-container .wrapper");
+
+      if (sidebar instanceof HTMLElement) {
+        sidebar.style.cssText = "display: none !important;";
+      }
+      if (mobileNav instanceof HTMLElement) {
+        mobileNav.style.cssText = "display: none !important;";
+      }
+      if (footer instanceof HTMLElement) {
+        footer.style.cssText = "display: none !important;";
+      }
+      if (lowBalanceBanner instanceof HTMLElement) {
+        lowBalanceBanner.style.cssText = "display: none !important;";
+      }
+      if (wrapper instanceof HTMLElement) {
+        wrapper.style.cssText = "display: none !important;";
+      }
+    };
+
+    // Hide immediately
+    hideElements();
+  }, []);
+
   if (!isMounted || !portalElement) {
-    return null;
+    // Return a full-screen loading state to prevent root layout from showing
+    return (
+      <div 
+        className="fixed inset-0 flex flex-col bg-gray-50 overflow-auto w-screen h-screen z-[99999]"
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999 }}
+      >
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading video details...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return createPortal(pageContent, portalElement);
