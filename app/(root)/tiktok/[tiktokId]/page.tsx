@@ -179,11 +179,14 @@ export default function TikTokDetailPage() {
       return;
     }
 
+    // Store tiktok_url in a variable to avoid TypeScript issues
+    const tiktokUrl = data.tiktok_url;
+
     // Try to fetch thumbnail from API
     async function fetchThumbnail() {
       try {
         setThumbnailLoading(true);
-        const response = await fetch(`/api/tiktok/thumbnail?url=${encodeURIComponent(data.tiktok_url)}`);
+        const response = await fetch(`/api/tiktok/thumbnail?url=${encodeURIComponent(tiktokUrl)}`);
         if (response.ok) {
           const result = await response.json();
           if (result.thumbnailUrl) {
@@ -199,6 +202,7 @@ export default function TikTokDetailPage() {
     }
 
     fetchThumbnail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.tiktok_url, data?.thumbnail_url]);
 
   // Handle redirect to Makoto's processor
