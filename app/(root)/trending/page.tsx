@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader } from '@/components/ui/sheet'
 import { Search, TrendingUp, TrendingDown, Heart, Bell, Filter, X } from 'lucide-react'
 import ProductCard from '@/components/shared/ProductCard'
+import DateRangeSelector from '@/components/shared/DateRangeSelector'
 import { format } from 'date-fns'
 
 interface WeeklyReport {
@@ -453,27 +454,18 @@ export default function TrendingProductsPage() {
             ) : reports.length === 0 ? (
               <div className="text-sm text-gray-500 hidden sm:block">No reports available</div>
             ) : (
-              <Select 
-                value={selectedReportId && selectedReportId.trim() !== '' ? selectedReportId : undefined} 
-                onValueChange={(value) => {
-                  if (value && value.trim() !== '') {
-                    setSelectedReportId(value)
-                  }
-                }}
-              >
-                <SelectTrigger className="hidden sm:flex w-[180px] h-9 bg-white rounded-xl border border-gray-200 pt-[14px] pr-4 pb-3 pl-4 text-sm font-medium text-gray-900 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 hover:border-gray-300">
-                  <SelectValue placeholder="Select date range" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border border-gray-200 bg-white shadow-lg mt-1 z-[100000]">
-                  {reports
-                    .filter((report) => report.id && report.id.trim() !== '')
-                    .map((report) => (
-                      <SelectItem key={report.id} value={report.id}>
-                        {report.label || `Report ${report.id}`}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <div className="hidden sm:block">
+                <DateRangeSelector
+                  reports={reports}
+                  selectedReportId={selectedReportId}
+                  onValueChange={(value) => {
+                    if (value && value.trim() !== '') {
+                      setSelectedReportId(value)
+                    }
+                  }}
+                  placeholder="Select date range"
+                />
+              </div>
             )}
           </div>
 
@@ -514,27 +506,19 @@ export default function TrendingProductsPage() {
             <div className="flex items-center gap-3">
               {/* Date Range Selector - Mobile */}
               {!reportsError && reports.length > 0 && (
-                <Select 
-                  value={selectedReportId && selectedReportId.trim() !== '' ? selectedReportId : undefined} 
-                  onValueChange={(value) => {
-                    if (value && value.trim() !== '') {
-                      setSelectedReportId(value)
-                    }
-                  }}
-                >
-                  <SelectTrigger className="flex-1 h-10 bg-white rounded-xl border border-gray-200 pt-[14px] pr-4 pb-3 pl-4 text-sm font-medium text-gray-900 outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
-                    <SelectValue placeholder="Select date range" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl border border-gray-200 bg-white shadow-lg mt-1 z-[100000]">
-                    {reports
-                      .filter((report) => report.id && report.id.trim() !== '')
-                      .map((report) => (
-                        <SelectItem key={report.id} value={report.id}>
-                          {report.label || `Report ${report.id}`}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex-1">
+                  <DateRangeSelector
+                    reports={reports}
+                    selectedReportId={selectedReportId}
+                    onValueChange={(value) => {
+                      if (value && value.trim() !== '') {
+                        setSelectedReportId(value)
+                      }
+                    }}
+                    placeholder="Select date range"
+                    className="w-full"
+                  />
+                </div>
               )}
               
               {/* Favorites Only Button - Mobile */}

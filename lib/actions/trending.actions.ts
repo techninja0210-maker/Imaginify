@@ -104,9 +104,26 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
       return []
     }
 
+    // Verify the report exists
+    const report = await prisma.weeklyReport.findUnique({
+      where: { id: reportId },
+      select: {
+        id: true,
+        weekStartDate: true,
+        weekEndDate: true,
+      },
+    })
+
+    if (!report) {
+      console.warn(`[getTrendingProducts] Report ${reportId} not found`)
+      return []
+    }
+
     where.reportId = reportId
 
-    // Get week stats with products
+    // Fetch ALL week stats for this report (no limit initially)
+    // Products are linked to reports via ProductWeekStat, regardless of when the product was created
+    // The date range selector is for selecting which report to view, not for filtering products by creation date
     let weekStats = await prisma.productWeekStat.findMany({
       where,
       include: {
@@ -133,8 +150,15 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
       orderBy: {
         rankThisWeek: "asc",
       },
-      take: limit,
+      // Fetch all records - we'll apply limit after other filters
     })
+    
+    console.log(`[getTrendingProducts] Fetched ${weekStats.length} week stats for report ${reportId}`)
+
+    // Filter out any weekStats where product is null (shouldn't happen, but safety check)
+    weekStats = weekStats.filter((stat) => stat.product !== null) as typeof weekStats
+    
+    console.log(`[getTrendingProducts] ${weekStats.length} products linked to report ${reportId} (date range: ${report.weekStartDate.toISOString().split('T')[0]} to ${report.weekEndDate.toISOString().split('T')[0]})`)
 
     // Apply filters
     let filteredStats = weekStats
@@ -247,7 +271,13 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
       filteredProducts = filteredProducts.filter((p) => p.category === category)
     }
 
-    return filteredProducts
+    // Apply limit AFTER all filters (date, platform, category, sales, etc.)
+    // This ensures we show the correct number of products that match all criteria
+    const finalProducts = filteredProducts.slice(0, limit)
+    
+    console.log(`[getTrendingProducts] Final result: ${finalProducts.length} products (from ${filteredProducts.length} after filters, limit: ${limit})`)
+
+    return finalProducts
   } catch (error) {
     console.error("Error fetching trending products:", error)
     return []

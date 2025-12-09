@@ -29,14 +29,29 @@ function extractImages(json: AmazonProductJson): {
   allImages: any[] | null;
 } {
   const media = json?.product?.media;
-  if (!media) {
-    return { mainImageUrl: null, allImages: null };
+  const productImages = json?.product?.images;
+  
+  // Get primary image from media.primary_image_url or use first image from product.images or media.images
+  let mainImageUrl = media?.primary_image_url || null;
+  if (!mainImageUrl) {
+    if (Array.isArray(productImages) && productImages.length > 0) {
+      mainImageUrl = productImages[0];
+    } else if (Array.isArray(media?.images) && media.images.length > 0) {
+      mainImageUrl = typeof media.images[0] === 'string' ? media.images[0] : media.images[0]?.url || null;
+    }
   }
 
-  const mainImageUrl = media.primary_image_url || null;
-  const allImages = media.images || null;
+  // Merge images from both sources, prioritizing media.images, then product.images
+  let allImages: any[] = [];
+  if (Array.isArray(media?.images) && media.images.length > 0) {
+    allImages = media.images;
+  } else if (Array.isArray(productImages) && productImages.length > 0) {
+    allImages = productImages;
+  } else {
+    allImages = [];
+  }
 
-  return { mainImageUrl, allImages };
+  return { mainImageUrl, allImages: allImages.length > 0 ? allImages : null };
 }
 
 /**
@@ -51,7 +66,10 @@ export async function processFullProduct(json: AmazonProductJson): Promise<Proce
   const product = json.product;
   const source = json.source || {};
   const meta = json.meta || {};
-  const scrapedAt = json.scraped_at ? new Date(json.scraped_at) : null;
+  // Check both json.scraped_at and meta.scraped_at
+  const scrapedAt = json.scraped_at 
+    ? new Date(json.scraped_at) 
+    : (meta.scraped_at ? new Date(meta.scraped_at) : null);
 
   // Extract images
   const { mainImageUrl, allImages } = extractImages(json);
@@ -62,9 +80,11 @@ export async function processFullProduct(json: AmazonProductJson): Promise<Proce
   const listPrice = price.list ? parseFloat(String(price.list)) : null;
   const currency = price.currency || null;
 
-  // Extract ratings
+  // Extract ratings - handle both 'average' and 'value' field names
   const rating = product.social_proof?.rating || {};
-  const averageRating = rating.value ? parseFloat(String(rating.value)) : null;
+  const averageRating = rating.average 
+    ? parseFloat(String(rating.average)) 
+    : (rating.value ? parseFloat(String(rating.value)) : null);
   const ratingScale = rating.scale ? parseFloat(String(rating.scale)) : null;
   const totalRatings = rating.count ? parseInt(String(rating.count), 10) : null;
 
@@ -74,23 +94,29 @@ export async function processFullProduct(json: AmazonProductJson): Promise<Proce
   // Extract availability
   const availability = product.availability || {};
 
-  // Extract engagement metrics
-  const customersUsuallyKeep = product.engagement?.customers_usually_keep || {};
+  // Check both engagement.units_sold and sales.units_sold
+  const engagementUnitsSold = product.engagement?.units_sold || {};
+  const salesUnitsSold = product.sales?.units_sold || {};
+  const unitsSold = engagementUnitsSold.display ? engagementUnitsSold : salesUnitsSold;
+  
+  const unitsSoldDisplay = unitsSold.display || null;
+  const unitsSoldNumericEstimate = unitsSold.numeric_estimate
+    ? parseInt(String(unitsSold.numeric_estimate), 10)
+    : null;
+  
+  // Extract engagement metrics - check both engagement and sales
+  const salesUsuallyKept = product.sales?.usually_kept || {};
+  const customersUsuallyKeep = product.engagement?.customers_usually_keep || salesUsuallyKept || {};
+  
   const customersUsuallyKeepPercentage = customersUsuallyKeep.percentage
     ? parseFloat(String(customersUsuallyKeep.percentage))
     : null;
   const customersUsuallyKeepRaw = customersUsuallyKeep.raw || null;
 
-  const unitsSold = product.engagement?.units_sold || {};
-  const unitsSoldDisplay = unitsSold.display || null;
-  const unitsSoldNumericEstimate = unitsSold.numeric_estimate
-    ? parseInt(String(unitsSold.numeric_estimate), 10)
-    : null;
-
-  // Extract URL and locale/marketplace
-  const productUrl = product.url || null;
-  const locale = json.locale || null;
-  const marketplace = json.marketplace || null;
+  // Extract URL and locale/marketplace - check both product.url and source.product_url
+  const productUrl = product.url || source.product_url || null;
+  const locale = json.locale || source.locale || null;
+  const marketplace = json.marketplace || source.marketplace || null;
 
   // Extract copy/text fields
   const copy = product.copy || {};
@@ -182,7 +208,105 @@ export async function processFullProduct(json: AmazonProductJson): Promise<Proce
     created = true;
   }
 
+  // Process reviews from social_proof.reviews_by_star
+  await processReviews(json, asin);
+
   return { success: true, asin, created, updated };
+}
+
+/**
+ * Process reviews from social_proof.reviews_by_star and save to AmazonProductReview table
+ */
+async function processReviews(json: AmazonProductJson, asin: string): Promise<void> {
+  const reviewsByStar = json?.product?.social_proof?.reviews_by_star;
+  if (!reviewsByStar || typeof reviewsByStar !== 'object') {
+    return; // No reviews to process
+  }
+
+  // Collect all reviews from all star ratings
+  const allReviews: any[] = [];
+  Object.keys(reviewsByStar).forEach((starRating) => {
+    const reviews = reviewsByStar[starRating];
+    if (Array.isArray(reviews)) {
+      reviews.forEach((review: any) => {
+        if (review && typeof review === 'object') {
+          allReviews.push({
+            ...review,
+            starRating: parseInt(starRating, 10),
+          });
+        }
+      });
+    }
+  });
+
+  if (allReviews.length === 0) {
+    return; // No valid reviews
+  }
+
+  // Process each review
+  for (const review of allReviews) {
+    try {
+      // Extract rating value from "X.0 out of 5 stars" format or use starRating
+      let ratingValue = review.starRating || null;
+      if (review.rating && typeof review.rating === 'string') {
+        const match = review.rating.match(/(\d+\.?\d*)/);
+        if (match) {
+          ratingValue = parseFloat(match[1]);
+        }
+      }
+
+      // Skip if no valid rating
+      if (!ratingValue || ratingValue < 1 || ratingValue > 5) {
+        continue;
+      }
+
+      const starRatingInt = Math.round(ratingValue);
+      const reviewer = review.reviewer || null;
+      const title = review.title || null;
+      const date = review.date || null;
+
+      // Check if review already exists (by asin, reviewer, title, and date)
+      // Since we don't have a unique constraint, we'll check manually
+      const existingReview = await prisma.amazonProductReview.findFirst({
+        where: {
+          asin,
+          reviewer: reviewer || undefined,
+          title: title || undefined,
+          date: date || undefined,
+        },
+      });
+
+      if (existingReview) {
+        // Update existing review
+        await prisma.amazonProductReview.update({
+          where: { id: existingReview.id },
+          data: {
+            rating: ratingValue,
+            starRating: starRatingInt,
+            body: review.body || null,
+            verified: review.verified || null,
+          },
+        });
+      } else {
+        // Create new review
+        await prisma.amazonProductReview.create({
+          data: {
+            asin,
+            rating: ratingValue,
+            starRating: starRatingInt,
+            reviewer,
+            title,
+            body: review.body || null,
+            date,
+            verified: review.verified || null,
+          },
+        });
+      }
+    } catch (error) {
+      // Log error but continue processing other reviews
+      console.error(`[AMAZON_PROCESSOR] Error processing review for ASIN ${asin}:`, error);
+    }
+  }
 }
 
 /**
@@ -211,6 +335,11 @@ export async function processImagesOnly(json: AmazonProductJson): Promise<Proces
   // Extract images
   const { mainImageUrl, allImages } = extractImages(json);
 
+  // Check both json.scraped_at and meta.scraped_at
+  const scrapedAt = json.scraped_at 
+    ? new Date(json.scraped_at) 
+    : (json.meta?.scraped_at ? new Date(json.meta.scraped_at) : new Date());
+
   // Update only image fields
   await prisma.amazonProduct.update({
     where: { asin },
@@ -218,7 +347,7 @@ export async function processImagesOnly(json: AmazonProductJson): Promise<Proces
       mainImageUrl,
       allImages: allImages ? (Array.isArray(allImages) ? JSON.parse(JSON.stringify(allImages)) : null) : null,
       // Update scrapedAt to reflect when images were updated
-      scrapedAt: json.scraped_at ? new Date(json.scraped_at) : new Date(),
+      scrapedAt,
     },
   });
 
