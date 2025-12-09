@@ -34,6 +34,7 @@ export interface TrendingProductData {
 }
 
 // Fetch all available weekly reports for date range selector
+// Returns all reports that have at least one ProductWeekStat record (products linked to them)
 export async function getWeeklyReports() {
   try {
     const reports = await prisma.weeklyReport.findMany({
@@ -45,16 +46,26 @@ export async function getWeeklyReports() {
         weekStartDate: true,
         weekEndDate: true,
         label: true,
+        _count: {
+          select: {
+            stats: true,
+          },
+        },
       },
     })
 
-    return reports.map((report) => ({
-      id: report.id,
-      value: report.id,
-      label: report.label || formatDateRange(report.weekStartDate, report.weekEndDate),
-      weekStart: report.weekStartDate,
-      weekEnd: report.weekEndDate,
-    }))
+    // Only include reports that have at least one ProductWeekStat (products linked to them)
+    const validReports = reports
+      .filter((report) => report._count.stats > 0)
+      .map((report) => ({
+        id: report.id,
+        value: report.id,
+        label: report.label || formatDateRange(report.weekStartDate, report.weekEndDate),
+        weekStart: report.weekStartDate,
+        weekEnd: report.weekEndDate,
+      }))
+
+    return validReports
   } catch (error) {
     console.error("Error fetching weekly reports:", error)
     return []
@@ -119,11 +130,17 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
       return []
     }
 
+    // Filter by reportId
     where.reportId = reportId
 
-    // Fetch ALL week stats for this report (no limit initially)
-    // Products are linked to reports via ProductWeekStat, regardless of when the product was created
-    // The date range selector is for selecting which report to view, not for filtering products by creation date
+    // Use the report's date range as the filter for product import dates
+    const reportStartDate = new Date(report.weekStartDate)
+    reportStartDate.setUTCHours(0, 0, 0, 0)
+    const reportEndDate = new Date(report.weekEndDate)
+    reportEndDate.setUTCHours(23, 59, 59, 999)
+
+    // Fetch ALL week stats for this report, then filter by TrendingProduct.createdAt
+    // This ensures we only show products that were imported during the report's date range
     let weekStats = await prisma.productWeekStat.findMany({
       where,
       include: {
@@ -150,15 +167,31 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
       orderBy: {
         rankThisWeek: "asc",
       },
-      // Fetch all records - we'll apply limit after other filters
+      // Fetch all records - we'll filter by product.createdAt after
     })
     
-    console.log(`[getTrendingProducts] Fetched ${weekStats.length} week stats for report ${reportId}`)
+    console.log(`[getTrendingProducts] Fetched ${weekStats.length} week stats for report ${reportId} (before date filtering)`)
 
     // Filter out any weekStats where product is null (shouldn't happen, but safety check)
     weekStats = weekStats.filter((stat) => stat.product !== null) as typeof weekStats
     
-    console.log(`[getTrendingProducts] ${weekStats.length} products linked to report ${reportId} (date range: ${report.weekStartDate.toISOString().split('T')[0]} to ${report.weekEndDate.toISOString().split('T')[0]})`)
+    // Filter by TrendingProduct.createdAt (actual product import date) to match the report's date range
+    // This ensures we only show products that were imported during the selected date range
+    const beforeDateFilterCount = weekStats.length
+    weekStats = weekStats.filter((stat) => {
+      const productCreatedAt = new Date(stat.product.createdAt)
+      productCreatedAt.setUTCHours(0, 0, 0, 0)
+      // Product is in range if its createdAt date is between report start and end dates
+      return productCreatedAt >= reportStartDate && productCreatedAt <= reportEndDate
+    }) as typeof weekStats
+
+    const afterDateFilterCount = weekStats.length
+    console.log(`[getTrendingProducts] Filtering by TrendingProduct.createdAt: ${reportStartDate.toISOString().split('T')[0]} to ${reportEndDate.toISOString().split('T')[0]}`)
+    if (beforeDateFilterCount !== afterDateFilterCount) {
+      console.log(`[getTrendingProducts] Date filtering: ${beforeDateFilterCount} -> ${afterDateFilterCount} products (removed ${beforeDateFilterCount - afterDateFilterCount} products not imported during the date range)`)
+    } else {
+      console.log(`[getTrendingProducts] All ${afterDateFilterCount} products are within the import date range`)
+    }
 
     // Apply filters
     let filteredStats = weekStats

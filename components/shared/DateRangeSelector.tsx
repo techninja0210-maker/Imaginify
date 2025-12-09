@@ -38,7 +38,7 @@ export default function DateRangeSelector({
       }}
     >
       <SelectTrigger
-        className={`h-9 bg-gray-100 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-900 hover:bg-gray-200 hover:border-gray-400 transition-colors outline-none focus:outline-none focus:ring-0 focus:visible:ring-0 [&>[data-radix-select-icon]]:hidden ${className}`}
+        className={`h-9 bg-gray-100 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-900 hover:bg-gray-200 hover:border-gray-400 transition-colors outline-none focus:outline-none focus:ring-0 focus:visible:ring-0 [&>*:last-child]:hidden ${className}`}
       >
         <SelectValue placeholder={placeholder} />
         <ChevronDown className="h-4 w-4 text-gray-900 ml-2 shrink-0 pointer-events-none" />
