@@ -266,6 +266,22 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
       const commission = "12%"
       const commissionValue = 12 // Extract numeric value for filtering
 
+      // Extract Amazon URL with fallbacks:
+      // 1. Try productUrl
+      // 2. Try canonicalUrl (backward compatibility)
+      // 3. Construct from ASIN if both are missing
+      let amazonUrl: string | undefined = undefined
+      if (amazonMatch && amazonProduct) {
+        if (amazonProduct.productUrl) {
+          amazonUrl = amazonProduct.productUrl
+        } else if (amazonProduct.canonicalUrl) {
+          amazonUrl = amazonProduct.canonicalUrl
+        } else if (amazonProduct.asin) {
+          // Construct Amazon URL from ASIN as fallback
+          amazonUrl = `https://www.amazon.com/dp/${amazonProduct.asin}`
+        }
+      }
+
       return {
         id: stat.id,
         rank: stat.rankThisWeek || index + 1,
@@ -283,7 +299,7 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
         })),
         isFavorite: favoriteProductIds.includes(stat.product.id),
         tiktokProductUrl: stat.product.tiktokProductUrl,
-        amazonUrl: amazonMatch ? amazonProduct?.productUrl || undefined : undefined,
+        amazonUrl,
         category: productCategory,
       }
     })
