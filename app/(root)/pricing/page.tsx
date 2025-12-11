@@ -1,5 +1,5 @@
 import Header from "@/components/shared/Header";
-import SubscribeButton from "@/components/shared/SubscribeButton";
+import { SubscriptionForm } from "@/components/shared/SubscriptionForm";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 import { prisma } from "@/lib/database/prisma";
@@ -177,7 +177,7 @@ const PricingPage = async () => {
                 {/* CTA Button */}
                 <div className="mt-auto">
                   {plan.priceId ? (
-                    <SubscribeButton 
+                    <SubscriptionForm
                       lineItems={[{ priceId: plan.priceId, quantity: 1 }]}
                       className={`w-full py-3 px-6 rounded-lg font-semibold transition-all ${
                         plan.popular

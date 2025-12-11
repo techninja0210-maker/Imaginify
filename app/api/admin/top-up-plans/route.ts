@@ -225,17 +225,79 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // Delete plan (purchases will remain but plan reference will be broken)
+    // Check if plan exists
+    const plan = await prisma.topUpPlan.findUnique({
+      where: { id },
+      include: {
+        purchases: {
+          select: { id: true },
+        },
+        autoTopUpSettings: {
+          select: { id: true, isActive: true },
+        },
+      },
+    });
+
+    if (!plan) {
+      return NextResponse.json(
+        { error: "Top-up plan not found" },
+        { status: 404 }
+      );
+    }
+
+    // Check if plan is used in auto top-up settings
+    if (plan.autoTopUpSettings.length > 0) {
+      const activeSettings = plan.autoTopUpSettings.filter(s => s.isActive);
+      if (activeSettings.length > 0) {
+        return NextResponse.json(
+          {
+            error: "Cannot delete plan: It is currently used in Auto Top-Up Settings",
+            message: `This plan is configured as the auto top-up package. Please change the Auto Top-Up Settings to use a different plan before deleting this one.`,
+            details: {
+              planId: plan.id,
+              planName: plan.publicName,
+              activeSettingsCount: activeSettings.length,
+            },
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Check if plan has purchases (optional: warn but allow deletion)
+    if (plan.purchases.length > 0) {
+      // Allow deletion but warn that purchase history will have broken references
+      console.warn(`[DELETE] Deleting plan ${id} with ${plan.purchases.length} purchases`);
+    }
+
+    // Delete plan
+    // Note: If there are inactive auto top-up settings referencing this plan,
+    // they will be orphaned but that's acceptable since they're inactive
     await prisma.topUpPlan.delete({
       where: { id },
     });
 
     return NextResponse.json({
       success: true,
-      message: "Top-up plan deleted",
+      message: "Top-up plan deleted successfully",
+      warning: plan.purchases.length > 0
+        ? `Note: ${plan.purchases.length} purchase record(s) still reference this plan, but the plan has been deleted.`
+        : undefined,
     });
   } catch (error: any) {
     console.error("[DELETE /api/admin/top-up-plans] Error:", error);
+    
+    // Handle foreign key constraint errors
+    if (error.code === "P2003" || error.message?.includes("Foreign key constraint")) {
+      return NextResponse.json(
+        {
+          error: "Cannot delete plan: It is referenced by other records",
+          message: "This plan cannot be deleted because it is being used in Auto Top-Up Settings or has active purchases. Please update the Auto Top-Up Settings first.",
+        },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
       {
         error: error?.message || "Failed to delete top-up plan",

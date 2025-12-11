@@ -13,6 +13,9 @@ async function getAllTopUpPlans() {
       purchases: {
         select: { id: true },
       },
+      autoTopUpSettings: {
+        select: { id: true, isActive: true },
+      },
     },
   });
 }

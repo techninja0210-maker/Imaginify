@@ -8,10 +8,12 @@ import { getRewardfulReferral } from "@/lib/utils/rewardful";
 
 const SubscribeButton = ({ 
   lineItems,
-  className 
+  className,
+  autoTopUpEnabled = true, // Default to enabled (pre-checked)
 }: { 
   lineItems: Array<{ priceId: string; quantity: number }>;
   className?: string;
+  autoTopUpEnabled?: boolean;
 }) => {
   const [isPending, startTransition] = useTransition();
 
@@ -19,7 +21,7 @@ const SubscribeButton = ({
     startTransition(async () => {
       // Get Rewardful referral if available
       const referral = getRewardfulReferral();
-      await startSubscriptionCheckout(lineItems, referral || undefined);
+      await startSubscriptionCheckout(lineItems, referral || undefined, autoTopUpEnabled);
     });
   };
 

@@ -69,18 +69,49 @@ export async function POST(request: Request) {
     }
 
     // ONE-TIME PAYMENT HANDLING (mode: "payment")
+    const isAutoTopUp = metadata?.autoTopUp === "true";
+    const clerkUserId = metadata?.clerkUserId || metadata?.buyerId;
+
+    // Handle auto top-up separately
+    if (isAutoTopUp && clerkUserId) {
+      try {
+        const { processAutoTopUpPayment } = await import('@/lib/services/auto-top-up-processor');
+        const result = await processAutoTopUpPayment(id, clerkUserId);
+        
+        if (result.success) {
+          console.log(`[WEBHOOK] Auto top-up processed successfully for user ${clerkUserId}`);
+          return NextResponse.json({ 
+            message: "OK", 
+            mode: "payment",
+            autoTopUp: true,
+            sessionId: id
+          });
+        } else {
+          console.error(`[WEBHOOK] Auto top-up processing failed: ${result.error}`);
+          return NextResponse.json({ 
+            error: result.error || "Failed to process auto top-up" 
+          }, { status: 500 });
+        }
+      } catch (autoTopUpError: any) {
+        console.error('[WEBHOOK] Error processing auto top-up:', autoTopUpError);
+        return NextResponse.json({ 
+          error: autoTopUpError.message || "Failed to process auto top-up" 
+        }, { status: 500 });
+      }
+    }
+
+    // Regular one-time payment handling
     const transaction = {
       stripeId: id,
       amount: amount_total ? amount_total / 100 : 0,
       plan: metadata?.plan || "",
       credits: Number(metadata?.credits) || 0,
-      buyerId: metadata?.clerkUserId || metadata?.buyerId || "",
+      buyerId: clerkUserId || "",
       createdAt: new Date(),
     };
 
     // Persist Stripe customer ID on the user for future billing portal access
     try {
-      const clerkUserId = metadata?.clerkUserId || metadata?.buyerId;
       if (clerkUserId && customerId) {
         await prisma.user.update({
           where: { clerkId: clerkUserId },
@@ -853,6 +884,39 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ ok: true });
+  }
+
+  // Handle payment intent succeeded (for auto top-up direct charges)
+  if (eventType === "payment_intent.succeeded") {
+    const paymentIntent = event.data.object as any;
+    const metadata = paymentIntent.metadata as Record<string, string>;
+    
+    if (metadata?.autoTopUp === "true" && metadata?.clerkUserId) {
+      try {
+        const { processAutoTopUpPayment } = await import('@/lib/services/auto-top-up-processor');
+        const result = await processAutoTopUpPayment(paymentIntent.id, metadata.clerkUserId);
+        
+        if (result.success) {
+          console.log(`[WEBHOOK] Auto top-up processed successfully for payment intent ${paymentIntent.id}`);
+          return NextResponse.json({ 
+            message: "OK", 
+            eventType: "payment_intent.succeeded",
+            autoTopUp: true,
+            paymentIntentId: paymentIntent.id
+          });
+        } else {
+          console.error(`[WEBHOOK] Auto top-up processing failed: ${result.error}`);
+          return NextResponse.json({ 
+            error: result.error || "Failed to process auto top-up" 
+          }, { status: 500 });
+        }
+      } catch (autoTopUpError: any) {
+        console.error('[WEBHOOK] Error processing auto top-up from payment intent:', autoTopUpError);
+        return NextResponse.json({ 
+          error: autoTopUpError.message || "Failed to process auto top-up" 
+        }, { status: 500 });
+      }
+    }
   }
 
   // Handle subscription deletion

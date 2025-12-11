@@ -22,6 +22,7 @@ interface TopUpPlanFormProps {
     isActive: boolean;
     isHidden: boolean;
     purchases?: Array<{ id: string }>;
+    autoTopUpSettings?: Array<{ id: string; isActive: boolean }>;
   } | null;
 }
 
@@ -121,21 +122,49 @@ export function TopUpPlanForm({ plan }: TopUpPlanFormProps) {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to delete top-up plan");
+        // Pass the full error data so we can access it in catch block
+        const error = new Error(data.error || "Failed to delete top-up plan") as any;
+        error.responseData = data;
+        throw error;
       }
 
       toast({
         title: "Success",
-        description: "Top-up plan deleted successfully",
+        description: data.warning || "Top-up plan deleted successfully",
       });
+
+      if (data.warning) {
+        setTimeout(() => {
+          toast({
+            title: "Note",
+            description: data.warning,
+            duration: 6000,
+          });
+        }, 500);
+      }
 
       router.refresh();
     } catch (error: any) {
+      const errorData = error.responseData || {};
+      const errorMessage = errorData.message || errorData.error || error.message || "Failed to delete top-up plan";
+      
       toast({
         title: "Error",
-        description: error.message || "Failed to delete top-up plan",
+        description: errorMessage,
         variant: "destructive",
+        duration: 10000, // Show longer for helpful error messages
       });
+
+      // If the error has details about auto top-up settings, show additional help
+      if (errorData.details?.activeSettingsCount > 0) {
+        setTimeout(() => {
+          toast({
+            title: "How to Fix",
+            description: `This plan is used in Auto Top-Up Settings. Go to /admin?tab=auto-top-up and change to a different plan first, then try deleting again.`,
+            duration: 10000,
+          });
+        }, 1500);
+      }
     } finally {
       setIsDeleting(false);
     }
@@ -175,8 +204,18 @@ export function TopUpPlanForm({ plan }: TopUpPlanFormProps) {
                   Hidden
                 </span>
               )}
+              {plan.autoTopUpSettings && plan.autoTopUpSettings.some(s => s.isActive) && (
+                <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700" title="Used in Auto Top-Up Settings">
+                  Auto Top-Up
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-400 mt-1">{purchaseCount} purchase(s)</p>
+            {plan.autoTopUpSettings && plan.autoTopUpSettings.some(s => s.isActive) && (
+              <p className="text-xs text-orange-600 mt-1">
+                ⚠️ Used in Auto Top-Up Settings
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -193,8 +232,13 @@ export function TopUpPlanForm({ plan }: TopUpPlanFormProps) {
             variant="outline"
             size="sm"
             onClick={handleDelete}
-            disabled={isDeleting}
-            className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+            disabled={isDeleting || (plan.autoTopUpSettings && plan.autoTopUpSettings.some(s => s.isActive))}
+            className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={
+              plan.autoTopUpSettings && plan.autoTopUpSettings.some(s => s.isActive)
+                ? "Cannot delete: Plan is used in Auto Top-Up Settings. Change Auto Top-Up Settings first."
+                : "Delete this plan"
+            }
           >
             <Trash2 className="w-4 h-4" />
             Delete
@@ -369,8 +413,16 @@ export function TopUpPlanForm({ plan }: TopUpPlanFormProps) {
             type="button"
             variant="outline"
             onClick={handleDelete}
-            disabled={isDeleting}
-            className="flex items-center gap-2 text-red-600 hover:text-red-700"
+            disabled={
+              isDeleting || 
+              (plan.autoTopUpSettings && plan.autoTopUpSettings.some(s => s.isActive))
+            }
+            className="flex items-center gap-2 text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={
+              plan.autoTopUpSettings && plan.autoTopUpSettings.some(s => s.isActive)
+                ? "Cannot delete: Plan is used in Auto Top-Up Settings. Change Auto Top-Up Settings first."
+                : "Delete this plan"
+            }
           >
             <Trash2 className="w-4 h-4" />
             {isDeleting ? "Deleting..." : "Delete"}

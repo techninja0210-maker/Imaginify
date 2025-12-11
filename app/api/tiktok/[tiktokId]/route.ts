@@ -103,7 +103,10 @@ export async function GET(
       thumbnail_url: thumbnailUrl, // Add thumbnail URL for preview
       product: {
         title: video.product.name,
-        image_url: video.product.displayImageUrl || "/img/product-placeholder.png",
+        // Prioritize Amazon product image if available
+        image_url: amazonProduct?.mainImageUrl 
+          || video.product.displayImageUrl 
+          || "/img/product-placeholder.png",
         category: amazonProduct?.categoryPath
           ? (amazonProduct.categoryPath as string[])?.[0]
           : undefined,
@@ -131,9 +134,11 @@ export async function GET(
         discount_percent: null, // Not available in current schema
       },
       amazon_match: {
-        has_match: !!amazonMatch,
-        asin: amazonMatch?.asin || undefined,
-        amazon_url: amazonProduct?.productUrl || undefined,
+        has_match: !!amazonMatch && !!amazonProduct,
+        asin: amazonMatch?.asin || amazonProduct?.asin || undefined,
+        amazon_url: amazonProduct?.productUrl 
+          || amazonProduct?.canonicalUrl 
+          || (amazonProduct?.asin ? `https://www.amazon.com/dp/${amazonProduct.asin}` : undefined),
       },
     };
 

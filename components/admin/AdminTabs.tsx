@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Users, DollarSign, RefreshCw, TrendingUp, CreditCard, ShoppingCart, Package } from "lucide-react";
+import { Users, DollarSign, RefreshCw, TrendingUp, CreditCard, ShoppingCart, Package, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AdminTabsProps {
@@ -51,6 +51,12 @@ const tabs = [
     label: "Amazon Products",
     icon: Package,
     href: "/admin/amazon-products",
+  },
+  {
+    id: "auto-top-up",
+    label: "Auto Top-Up",
+    icon: Zap,
+    href: "/admin?tab=auto-top-up",
   },
 ];
 

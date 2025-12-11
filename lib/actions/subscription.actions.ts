@@ -6,7 +6,8 @@ import { redirect } from "next/navigation";
 
 export async function startSubscriptionCheckout(
   lineItems: Array<{ priceId: string; quantity: number }>,
-  rewardfulReferral?: string
+  rewardfulReferral?: string,
+  autoTopUpEnabled: boolean = true // Default to enabled (pre-checked)
 ) {
   const { userId } = auth();
   if (!userId) redirect("/sign-in");
@@ -27,8 +28,21 @@ export async function startSubscriptionCheckout(
     }
   }
 
+  // Update user's auto top-up preference immediately (before checkout)
+  // This ensures the preference is saved even if checkout is cancelled
+  try {
+    await prisma.user.update({
+      where: { clerkId: userId },
+      data: { autoTopUpEnabled },
+    });
+  } catch (error) {
+    console.error("[CHECKOUT] Failed to update auto top-up preference:", error);
+    // Don't fail checkout if preference update fails
+  }
+
   const metadata: Record<string, string> = {
     clerkUserId: userId,
+    autoTopUpEnabled: String(autoTopUpEnabled), // Also pass in metadata for webhook
   };
 
   // Add Rewardful referral if provided
@@ -136,7 +150,10 @@ export async function openCustomerPortalWithReturnUrl(customerId: string, return
   redirect(portal.url);
 }
 
-export async function changeSubscriptionPlan(targetPlanInternalId: string) {
+export async function changeSubscriptionPlan(
+  targetPlanInternalId: string,
+  autoTopUpEnabled?: boolean // Optional - if not provided, keep existing preference
+) {
   const { userId } = auth();
   if (!userId) redirect("/sign-in");
 

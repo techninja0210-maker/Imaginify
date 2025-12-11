@@ -383,6 +383,20 @@ export async function updateCredits(userId: string, creditFee: number, reason: s
 
       console.log(`[UPDATE_CREDITS] Successfully updated credits: userId=${userId}, increment=${creditFee}, oldBalance=${user.creditBalance}, newBalance=${updatedUser.creditBalance}`);
       
+      // Check for auto top-up if credits were deducted (negative creditFee)
+      if (creditFee < 0 && updatedUser.creditBalance <= updatedUser.lowBalanceThreshold) {
+        try {
+          const { checkAndProcessAutoTopUp } = await import('@/lib/services/auto-top-up-processor');
+          const autoTopUpResult = await checkAndProcessAutoTopUp(userId, updatedUser.creditBalance);
+          if (autoTopUpResult.processed) {
+            console.log(`[UPDATE_CREDITS] Auto top-up triggered for user ${userId}`);
+          }
+        } catch (autoTopUpError) {
+          // Don't fail the credit update if auto top-up check fails
+          console.error('[UPDATE_CREDITS] Auto top-up check failed:', autoTopUpError);
+        }
+      }
+      
       // Revalidate cache to ensure fresh data is shown immediately
       revalidatePath('/');
       revalidatePath('/profile');

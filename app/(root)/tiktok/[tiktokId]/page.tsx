@@ -395,9 +395,25 @@ export default function TikTokDetailPage() {
                     {/* Product Info */}
                     <div className="space-y-4">
                       <div>
-                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 leading-tight">
-                          {data.product.title}
-                        </h1>
+                        <div className="flex items-start justify-between gap-4 mb-2">
+                          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight flex-1">
+                            {data.product.title}
+                          </h1>
+                          {/* Amazon Match Badge */}
+                          {data.amazon_match.has_match && (
+                            <div className="flex-shrink-0">
+                              <div className="inline-flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-1.5">
+                                <i className="fab fa-amazon text-orange-600 text-lg"></i>
+                                <span className="text-xs font-semibold text-orange-700">Amazon Match</span>
+                                {data.amazon_match.asin && (
+                                  <span className="text-xs font-mono text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">
+                                    {data.amazon_match.asin}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <div className="flex items-center gap-3 text-sm text-gray-600">
                           {data.creator.handle && (
                             <span className="flex items-center gap-1.5">

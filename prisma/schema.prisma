@@ -497,20 +497,21 @@ model SubscriptionPlan {
 
 // TopUpPlan: Defines one-time top-up credit packs
 model TopUpPlan {
-  id                             String          @id @default(cuid())
-  internalId                     String          @unique // e.g., "topup_5000_v1"
+  id                             String              @id @default(cuid())
+  internalId                     String              @unique // e.g., "topup_5000_v1"
   publicName                     String // e.g., "5,000 Credit Boost"
   priceUsd                       Float // Price in USD
   creditsGranted                 Int // Credits granted
-  creditExpiryDays               Int             @default(365) // Days until credits expire (default 365 for top-ups)
-  stripePriceId                  String?         @unique // Stripe Price ID
+  creditExpiryDays               Int                 @default(365) // Days until credits expire (default 365 for top-ups)
+  stripePriceId                  String?             @unique // Stripe Price ID
   stripeProductId                String? // Stripe Product ID
-  canPurchaseWithoutSubscription Boolean         @default(true) // Can non-subscribers buy this?
-  isActive                       Boolean         @default(true)
-  isHidden                       Boolean         @default(false)
-  createdAt                      DateTime        @default(now())
-  updatedAt                      DateTime        @updatedAt
+  canPurchaseWithoutSubscription Boolean             @default(true) // Can non-subscribers buy this?
+  isActive                       Boolean             @default(true)
+  isHidden                       Boolean             @default(false)
+  createdAt                      DateTime            @default(now())
+  updatedAt                      DateTime            @updatedAt
   purchases                      TopUpPurchase[]
+  autoTopUpSettings              AutoTopUpSettings[]
 
   @@map("top_up_plans")
 }
@@ -557,4 +558,17 @@ model TopUpPurchase {
   @@index([userId, expiresAt])
   @@index([stripeSessionId])
   @@map("top_up_purchases")
+}
+
+// AutoTopUpSettings: Admin-configurable settings for auto top-up feature
+model AutoTopUpSettings {
+  id               String    @id @default(cuid())
+  triggerThreshold Int       @default(200) // Credit balance threshold that triggers auto top-up
+  topUpPlanId      String // Reference to TopUpPlan (the $10/1,000 credits package)
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  topUpPlan        TopUpPlan @relation(fields: [topUpPlanId], references: [id])
+
+  @@map("auto_top_up_settings")
 }
