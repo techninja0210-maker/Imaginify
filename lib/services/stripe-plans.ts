@@ -39,6 +39,16 @@ export async function findOrCreateSubscriptionPlan(stripePriceId: string): Promi
   const internalId = (price.metadata as any)?.internalId || product.metadata?.internalId || `sub_${planFamily}_v${version}`;
   const publicName = (price.metadata as any)?.publicName || product.name || `${planFamily} Plan`;
 
+  // Validate credits are configured
+  if (!credits || credits <= 0) {
+    console.error(`[STRIPE_PLANS] ⚠️  WARNING: Subscription plan ${publicName} (price ${priceId}) has no credits configured in Stripe metadata.`);
+    console.error(`[STRIPE_PLANS] Please add 'credits' metadata to Stripe price ${priceId} or product ${product.id}`);
+    console.error(`[STRIPE_PLANS] Price metadata:`, price.metadata);
+    console.error(`[STRIPE_PLANS] Product metadata:`, product.metadata);
+    // Don't throw - allow plan creation but log warning
+    // The webhook will catch this and provide a better error message
+  }
+
   // Create plan
   const plan = await prisma.subscriptionPlan.create({
     data: {

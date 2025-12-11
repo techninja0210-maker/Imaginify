@@ -288,19 +288,43 @@ export async function POST(request: Request) {
     const changeType = subscription.metadata?.changeType as string | undefined; // "upgrade" or "downgrade"
     const targetPlanId = subscription.metadata?.targetPlanId as string | undefined;
     
+    console.log(`[WEBHOOK] Processing ${eventType} for subscription ${stripeSubscriptionId}, customer ${customerId}, status: ${status}`);
+    
     try {
       // Find user by Stripe customer ID
       let user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } });
+      console.log(`[WEBHOOK] User lookup by customerId ${customerId}: ${user ? `Found user ${user.clerkId}` : 'Not found, trying email fallback'}`);
+      
       // Fallback: map by email
       if (!user) {
-        const customer = await stripe.customers.retrieve(customerId);
-        const email = (customer as any)?.email as string | undefined;
-        if (email) {
-          user = await prisma.user.findFirst({ where: { email } });
-          if (user) {
-            await prisma.user.update({ where: { clerkId: user.clerkId }, data: { stripeCustomerId: customerId } });
+        try {
+          const customer = await stripe.customers.retrieve(customerId);
+          const email = (customer as any)?.email as string | undefined;
+          console.log(`[WEBHOOK] Customer email lookup: ${email || 'No email found'}`);
+          
+          if (email) {
+            user = await prisma.user.findFirst({ where: { email } });
+            if (user) {
+              await prisma.user.update({ where: { clerkId: user.clerkId }, data: { stripeCustomerId: customerId } });
+              console.log(`[WEBHOOK] Linked customer ${customerId} to user ${user.clerkId} via email ${email}`);
+            } else {
+              console.error(`[WEBHOOK] No user found with email ${email} - subscription cannot be processed`);
+            }
+          } else {
+            console.error(`[WEBHOOK] Customer ${customerId} has no email - subscription cannot be processed`);
           }
+        } catch (emailLookupError: any) {
+          console.error(`[WEBHOOK] Failed to retrieve customer ${customerId} for email lookup:`, emailLookupError?.message);
         }
+      }
+      
+      if (!user) {
+        console.error(`[WEBHOOK] ❌ Cannot process subscription ${stripeSubscriptionId}: No user found for customer ${customerId}`);
+        return NextResponse.json({
+          error: "User not found for subscription",
+          customerId,
+          stripeSubscriptionId,
+        }, { status: 404 });
       }
       
       if (user) {
@@ -315,6 +339,21 @@ export async function POST(request: Request) {
           const plan = await prisma.subscriptionPlan.findUnique({
             where: { id: planResult.id }
           });
+
+          if (!plan) {
+            console.error(`[WEBHOOK] Failed to find subscription plan after creation for price ${priceId}`);
+            return NextResponse.json({
+              error: "Failed to create or find subscription plan"
+            }, { status: 500 });
+          }
+
+          // Validate plan has credits configured
+          if (!plan.creditsPerCycle || plan.creditsPerCycle <= 0) {
+            console.error(`[WEBHOOK] Subscription plan ${plan.id} (${plan.publicName}) has no credits configured (creditsPerCycle: ${plan.creditsPerCycle}). Check Stripe price metadata for 'credits' field.`);
+            return NextResponse.json({
+              error: `Subscription plan has no credits configured. Plan: ${plan.publicName}, creditsPerCycle: ${plan.creditsPerCycle}. Please add 'credits' metadata to Stripe price ${priceId}.`
+            }, { status: 500 });
+          }
 
           if (plan) {
             // Map Stripe status to our enum
@@ -366,33 +405,54 @@ export async function POST(request: Request) {
 
             // Grant credits immediately for NEW subscription creation (if active)
             if (eventType === "customer.subscription.created" && status === "active") {
-              console.log(`[WEBHOOK] New subscription created - granting initial credits for plan ${plan.publicName}`);
+              console.log(`[WEBHOOK] ✅ New subscription created - granting initial credits for plan ${plan.publicName} (${plan.creditsPerCycle} credits)`);
               
               try {
-                const expiresAt = new Date(userSubscription.currentPeriodEnd);
-                expiresAt.setDate(expiresAt.getDate() + plan.creditExpiryDays);
-
-                await grantCreditsWithExpiry({
-                  userId: user.clerkId,
-                  type: "SUBSCRIPTION",
-                  amount: plan.creditsPerCycle,
-                  expiresAt,
-                  reason: `Initial subscription credit grant for ${plan.publicName}`,
-                  planId: plan.id,
-                  subscriptionId: userSubscription.id,
-                  idempotencyKey: `stripe:subscription:created:${stripeSubscriptionId}`,
-                  metadata: {
-                    stripeSubscriptionId,
-                    planName: plan.publicName,
-                    periodEnd: userSubscription.currentPeriodEnd.toISOString(),
-                    initialGrant: true,
-                  }
+                // Check if credits were already granted (idempotency check)
+                const existingGrant = await prisma.creditGrant.findFirst({
+                  where: {
+                    userId: user.id,
+                    idempotencyKey: `stripe:subscription:created:${stripeSubscriptionId}`,
+                  },
                 });
 
-                console.log(`[WEBHOOK] Initial subscription credits granted: ${plan.creditsPerCycle} credits for plan ${plan.publicName}`);
+                if (existingGrant) {
+                  console.log(`[WEBHOOK] Credits already granted for subscription ${stripeSubscriptionId} (idempotency key match)`);
+                } else {
+                  const expiresAt = new Date(userSubscription.currentPeriodEnd);
+                  expiresAt.setDate(expiresAt.getDate() + plan.creditExpiryDays);
+
+                  const grantResult = await grantCreditsWithExpiry({
+                    userId: user.clerkId,
+                    type: "SUBSCRIPTION",
+                    amount: plan.creditsPerCycle,
+                    expiresAt,
+                    reason: `Initial subscription credit grant for ${plan.publicName}`,
+                    planId: plan.id,
+                    subscriptionId: userSubscription.id,
+                    idempotencyKey: `stripe:subscription:created:${stripeSubscriptionId}`,
+                    metadata: {
+                      stripeSubscriptionId,
+                      planName: plan.publicName,
+                      periodEnd: userSubscription.currentPeriodEnd.toISOString(),
+                      initialGrant: true,
+                    }
+                  });
+
+                  console.log(`[WEBHOOK] ✅ Initial subscription credits granted successfully: ${plan.creditsPerCycle} credits for plan ${plan.publicName}, grant ID: ${grantResult.grantId}`);
+                }
               } catch (initialGrantError: any) {
-                console.error(`[WEBHOOK] Error granting initial subscription credits:`, initialGrantError);
+                console.error(`[WEBHOOK] ❌ Error granting initial subscription credits:`, initialGrantError);
+                console.error(`[WEBHOOK] Error details:`, {
+                  message: initialGrantError?.message,
+                  stack: initialGrantError?.stack,
+                  userId: user.clerkId,
+                  subscriptionId: stripeSubscriptionId,
+                  planId: plan.id,
+                  creditsPerCycle: plan.creditsPerCycle,
+                });
                 // Don't fail the webhook - invoice.paid will also try to grant credits
+                // But log this as a critical error for monitoring
               }
             }
 

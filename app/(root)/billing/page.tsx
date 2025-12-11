@@ -4,10 +4,14 @@ import { prisma } from "@/lib/database/prisma";
 import { getUserById } from "@/lib/actions/user.actions";
 import { auth } from "@clerk/nextjs";
 import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
 import Stripe from "stripe";
 import Link from "next/link";
 import { CreditCard, Calendar, Coins, TrendingUp, Settings, ShoppingBag, FileText, Download, ArrowUp, ArrowDown, Check } from "lucide-react";
 import dynamicImport from "next/dynamic";
+import { SyncSubscriptionButton } from "./SyncSubscriptionButton";
+import { AutoSyncSubscription } from "./AutoSyncSubscription";
+import { Suspense } from "react";
 
 // Dynamically import client component to avoid SSR issues with hooks
 const CreditBreakdown = dynamicImport(
@@ -87,6 +91,10 @@ const BillingPage = async () => {
   let currentPlan: string | null = null;
   let renewsOn: string | null = null;
   const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null as any;
+
+  // Note: Subscription sync is now handled by the AutoSyncSubscription client component
+  // It automatically syncs when the page loads, detecting mismatches between Stripe and database
+  // This avoids server-side fetch issues and provides better user experience with client-side handling
 
   // Fallback: if no saved customerId, try to resolve by email
   if (!customerId && stripe) {
@@ -229,6 +237,11 @@ const BillingPage = async () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Auto-sync subscription when returning from Stripe */}
+      <Suspense fallback={null}>
+        <AutoSyncSubscription />
+      </Suspense>
+
       {/* Simple Header */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-6 py-6">
@@ -349,7 +362,13 @@ const BillingPage = async () => {
                 {customerId ? (
                   <form action={async () => {
                     "use server";
-                    await openCustomerPortalWithReturnUrl(customerId, `${process.env.NEXT_PUBLIC_SERVER_URL || 'https://shoppablevideos.com'}/billing`);
+                    // Get current origin from request headers
+                    const { headers } = await import("next/headers");
+                    const headersList = headers();
+                    const host = headersList.get("host") || "";
+                    const protocol = headersList.get("x-forwarded-proto") || (host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https");
+                    const currentBaseUrl = `${protocol}://${host}`;
+                    await openCustomerPortalWithReturnUrl(customerId, `${currentBaseUrl}/billing`);
                   }}>
                     <Button
                       type="submit"
@@ -362,8 +381,14 @@ const BillingPage = async () => {
                 ) : (
                   <form action={async () => {
                     "use server";
+                    // Get current origin from request headers
+                    const { headers } = await import("next/headers");
+                    const headersList = headers();
+                    const host = headersList.get("host") || "";
+                    const protocol = headersList.get("x-forwarded-proto") || (host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https");
+                    const currentBaseUrl = `${protocol}://${host}`;
                     const cid = await ensureStripeCustomerForCurrentUser();
-                    await openCustomerPortalWithReturnUrl(cid, `${process.env.NEXT_PUBLIC_SERVER_URL}/billing`);
+                    await openCustomerPortalWithReturnUrl(cid, `${currentBaseUrl}/billing`);
                   }}>
                     <Button 
                       type="submit" 
