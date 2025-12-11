@@ -282,12 +282,18 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
         }
       }
 
+      // Prioritize Amazon product image over trending product image
+      // Use Amazon product's mainImageUrl if available, otherwise fallback to trending product's displayImageUrl
+      const displayImageUrl = amazonProduct?.mainImageUrl 
+        || stat.product.displayImageUrl 
+        || "/img/product-placeholder.png";
+
       return {
         id: stat.id,
         rank: stat.rankThisWeek || index + 1,
         productId: stat.product.id,
         productName: stat.product.name,
-        displayImageUrl: stat.product.displayImageUrl || "/img/product-placeholder.png",
+        displayImageUrl,
         sales7d: stat.tiktokSales7d || 0,
         commission,
         commissionValue, // Add numeric value for filtering
