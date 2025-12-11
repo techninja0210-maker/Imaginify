@@ -41,8 +41,8 @@ export async function findOrCreateSubscriptionPlan(stripePriceId: string): Promi
 
   // Validate credits are configured
   if (!credits || credits <= 0) {
-    console.error(`[STRIPE_PLANS] ⚠️  WARNING: Subscription plan ${publicName} (price ${priceId}) has no credits configured in Stripe metadata.`);
-    console.error(`[STRIPE_PLANS] Please add 'credits' metadata to Stripe price ${priceId} or product ${product.id}`);
+    console.error(`[STRIPE_PLANS] ⚠️  WARNING: Subscription plan ${publicName} (price ${stripePriceId}) has no credits configured in Stripe metadata.`);
+    console.error(`[STRIPE_PLANS] Please add 'credits' metadata to Stripe price ${stripePriceId} or product ${product.id}`);
     console.error(`[STRIPE_PLANS] Price metadata:`, price.metadata);
     console.error(`[STRIPE_PLANS] Product metadata:`, product.metadata);
     // Don't throw - allow plan creation but log warning

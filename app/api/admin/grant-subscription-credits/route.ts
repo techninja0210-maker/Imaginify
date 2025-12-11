@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     expiresAt.setDate(expiresAt.getDate() + subscription.plan.creditExpiryDays);
 
     const result = await grantCreditsWithExpiry({
-      userId: subscription.user.user.clerkId,
+      userId: subscription.user.clerkId,
       type: "SUBSCRIPTION",
       amount: subscription.plan.creditsPerCycle,
       expiresAt,

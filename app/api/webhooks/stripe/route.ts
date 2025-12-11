@@ -412,7 +412,11 @@ export async function POST(request: Request) {
                 const existingGrant = await prisma.creditGrant.findFirst({
                   where: {
                     userId: user.id,
-                    idempotencyKey: `stripe:subscription:created:${stripeSubscriptionId}`,
+                    subscriptionId: userSubscription.id,
+                    type: "SUBSCRIPTION",
+                    createdAt: {
+                      gte: currentPeriodStart,
+                    },
                   },
                 });
 

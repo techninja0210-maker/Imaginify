@@ -164,8 +164,9 @@ export async function POST(req: NextRequest) {
           where: {
             userId: user.id,
             subscriptionId: userSubscription.id,
-            idempotencyKey: {
-              startsWith: `stripe:subscription:created:${stripeSubscriptionId}`,
+            type: "SUBSCRIPTION",
+            createdAt: {
+              gte: currentPeriodStart,
             },
           },
         });
