@@ -33,8 +33,9 @@ const navLinks = [
     route: "/billing",
   },
   {
-    label: "Support",
-    route: "/support",
+    label: "Support / Tutorials",
+    route: "https://tinyurl.com/shoppablevideos",
+    isExternal: true,
   },
   {
     label: "Affiliate",
@@ -79,8 +80,22 @@ const TopNavbar = () => {
           {/* Navigation Links - Hidden on mobile */}
           <nav className="hidden lg:flex items-center gap-0.5 ml-auto mr-8">
             {navLinks.map((link) => {
-              const isActive = pathname === link.route || 
-                (link.route !== '/' && pathname?.startsWith(link.route))
+              const isActive = !link.isExternal && (pathname === link.route || 
+                (link.route !== '/' && pathname?.startsWith(link.route)))
+              
+              if (link.isExternal) {
+                return (
+                  <a
+                    key={link.route}
+                    href={link.route}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2 rounded-md text-xs font-medium transition-colors whitespace-nowrap text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                  >
+                    {link.label}
+                  </a>
+                )
+              }
               
               return (
                 <Link
@@ -128,8 +143,23 @@ const TopNavbar = () => {
             <nav className="lg:hidden border-t border-gray-200 py-3">
               <div className="flex flex-col space-y-1 px-6">
                 {navLinks.map((link) => {
-                  const isActive = pathname === link.route || 
-                    (link.route !== '/' && pathname?.startsWith(link.route))
+                  const isActive = !link.isExternal && (pathname === link.route || 
+                    (link.route !== '/' && pathname?.startsWith(link.route)))
+                  
+                  if (link.isExternal) {
+                    return (
+                      <a
+                        key={link.route}
+                        href={link.route}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="px-4 py-2.5 rounded-lg text-sm font-medium transition-colors text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                      >
+                        {link.label}
+                      </a>
+                    )
+                  }
                   
                   return (
                     <Link
