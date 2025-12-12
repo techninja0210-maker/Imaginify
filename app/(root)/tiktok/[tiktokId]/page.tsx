@@ -155,14 +155,11 @@ export default function TikTokDetailPage() {
         
         if (result.success) {
           setData(result);
-          // If thumbnail is already in response, mark as loaded
-          if (result.thumbnail_url) {
-            setThumbnailLoading(false);
-            setThumbnailError(false);
-          } else {
-            // No thumbnail in response, will try to fetch
-            setThumbnailLoading(true);
-          }
+          // Always fetch fresh thumbnail for TikTok videos
+          // Stored thumbnails from database are often expired TikTok CDN URLs (403 errors)
+          // This matches the behavior of the trending page
+          setThumbnailLoading(true);
+          setThumbnailError(false);
         } else {
           throw new Error(result.error || "Failed to load video data");
         }
@@ -177,41 +174,47 @@ export default function TikTokDetailPage() {
     fetchVideoData();
   }, [tiktokId]);
 
-  // Fetch thumbnail if not in data
+  // Always fetch fresh thumbnail for TikTok videos
+  // Ignore stored thumbnails from database - they're often expired TikTok CDN URLs (403 errors)
   useEffect(() => {
     if (!data || !data.tiktok_url) return;
-    
-    // If thumbnail already exists, no need to fetch
-    if (data.thumbnail_url) {
-      setThumbnailLoading(false);
-      return;
-    }
 
     // Store tiktok_url in a variable to avoid TypeScript issues
     const tiktokUrl = data.tiktok_url;
 
-    // Try to fetch thumbnail from API
+    // Always fetch fresh thumbnail via oEmbed API (matches trending page behavior)
     async function fetchThumbnail() {
       try {
         setThumbnailLoading(true);
+        setThumbnailError(false);
+        
         const response = await fetch(`/api/tiktok/thumbnail?url=${encodeURIComponent(tiktokUrl)}`);
         if (response.ok) {
           const result = await response.json();
           if (result.thumbnailUrl) {
-            // Update data with thumbnail
+            // Update data with fresh thumbnail (direct URL, no proxy - same as trending page)
             setData((prev) => prev ? { ...prev, thumbnail_url: result.thumbnailUrl } : null);
+            setThumbnailError(false);
+          } else {
+            // No thumbnail available
+            setThumbnailError(true);
           }
+        } else {
+          // API request failed
+          setThumbnailError(true);
         }
       } catch (err) {
-        console.warn('Failed to fetch thumbnail:', err);
+        console.warn('[TikTok Detail] Failed to fetch thumbnail:', err);
+        setThumbnailError(true);
       } finally {
         setThumbnailLoading(false);
       }
     }
 
     fetchThumbnail();
+    // Only re-fetch if tiktok_url changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.tiktok_url, data?.thumbnail_url]);
+  }, [data?.tiktok_url]);
 
   // Handle redirect to Makoto's processor
   const handleStartRemixWorkflow = () => {
