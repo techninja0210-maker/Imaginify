@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Simple in-memory cache to avoid duplicate requests for the same URL
 const thumbnailCache = new Map<string, { thumbnailUrl: string | null; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes for successful fetches
+const FAILED_CACHE_TTL = 60 * 60 * 1000; // 1 hour for failed fetches (reduce redundant API calls)
 const MAX_CACHE_SIZE = 1000; // Limit cache size
 
 // Track ongoing requests to deduplicate simultaneous requests for the same URL
@@ -49,9 +50,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Check cache first
+    // Use longer cache TTL for failed requests to reduce redundant API calls
     const cached = thumbnailCache.get(videoUrl);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return NextResponse.json({ thumbnailUrl: cached.thumbnailUrl });
+    if (cached) {
+      const cacheAge = Date.now() - cached.timestamp;
+      const isFailed = cached.thumbnailUrl === null;
+      const ttl = isFailed ? FAILED_CACHE_TTL : CACHE_TTL;
+      
+      if (cacheAge < ttl) {
+        return NextResponse.json({ thumbnailUrl: cached.thumbnailUrl });
+      }
     }
 
     // Check if there's already a pending request for this URL
