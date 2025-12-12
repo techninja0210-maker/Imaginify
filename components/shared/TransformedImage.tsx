@@ -5,6 +5,7 @@ import { CldImage, getCldImageUrl } from 'next-cloudinary'
 import { PlaceholderValue } from 'next/dist/shared/lib/get-img-props'
 import Image from 'next/image'
 import React from 'react'
+import { Loader } from './Loader'
 
 const TransformedImage = ({ image, type, title, transformationConfig, isTransforming, setIsTransforming, hasDownload = false }: TransformedImageProps) => {
   const downloadHandler = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
@@ -64,13 +65,7 @@ const TransformedImage = ({ image, type, title, transformationConfig, isTransfor
 
           {isTransforming && (
             <div className="transforming-loader">
-              <Image 
-                src="/assets/icons/spinner.svg"
-                width={50}
-                height={50}
-                alt="spinner"
-              />
-              <p className="text-white/80">Please wait...</p>
+              <Loader size="lg" text="Please wait..." className="text-white" />
             </div>
           )}
         </div>

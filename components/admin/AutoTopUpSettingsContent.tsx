@@ -6,7 +6,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Save, RefreshCw } from "lucide-react";
+import { Save } from "lucide-react";
+import { Spinner, InlineLoader } from "@/components/shared/Loader";
 import {
   Select,
   SelectContent,
@@ -132,7 +133,7 @@ export function AutoTopUpSettingsContent() {
   if (loadingSettings) {
     return (
       <div className="flex items-center justify-center py-12">
-        <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+        <Spinner size="lg" className="text-gray-400" />
       </div>
     );
   }
@@ -233,10 +234,7 @@ export function AutoTopUpSettingsContent() {
               className="w-full sm:w-auto"
             >
               {isLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
-                </>
+                <InlineLoader text="Saving..." size="sm" />
               ) : (
                 <>
                   <Save className="w-4 h-4 mr-2" />

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Save, Trash2, Edit2, X } from "lucide-react";
 
 interface TopUpPlanFormProps {
+  onSuccess?: () => void;
   plan?: {
     id: string;
     internalId: string;
@@ -26,10 +27,10 @@ interface TopUpPlanFormProps {
   } | null;
 }
 
-export function TopUpPlanForm({ plan }: TopUpPlanFormProps) {
+export function TopUpPlanForm({ plan, onSuccess }: TopUpPlanFormProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const [isEditing, setIsEditing] = useState(!plan);
+  const [isEditing, setIsEditing] = useState(true); // Always start in edit mode for dedicated edit pages
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -76,6 +77,9 @@ export function TopUpPlanForm({ plan }: TopUpPlanFormProps) {
           : "Top-up plan created successfully",
       });
 
+      if (onSuccess) {
+        onSuccess();
+      }
       router.refresh();
       if (plan) {
         setIsEditing(false);
@@ -143,7 +147,13 @@ export function TopUpPlanForm({ plan }: TopUpPlanFormProps) {
         }, 500);
       }
 
-      router.refresh();
+      // Refresh via window reload since we're in a modal
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error: any) {
       const errorData = error.responseData || {};
       const errorMessage = errorData.message || errorData.error || error.message || "Failed to delete top-up plan";

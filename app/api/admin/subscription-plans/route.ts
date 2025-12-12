@@ -36,7 +36,7 @@ export async function GET() {
       totalSubscriberCount: plan.subscriptions.length,
     }));
 
-    return NextResponse.json({ plans: plansWithCounts });
+    return NextResponse.json({ success: true, plans: plansWithCounts });
   } catch (error: any) {
     console.error("[GET /api/admin/subscription-plans] Error:", error);
     return NextResponse.json(

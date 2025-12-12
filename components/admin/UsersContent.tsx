@@ -1,11 +1,10 @@
 "use client";
 
-import { CreditUpdateForm } from "@/components/admin/CreditUpdateForm";
-import { RoleUpdateForm } from "@/components/admin/RoleUpdateForm";
-import { UserStatusForm } from "@/components/admin/UserStatusForm";
-import { canUpdateUserCredits, canUpdateUserRoles, canDeleteUsers } from "@/lib/auth/roles";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { UserEditModal } from "./UserEditModal";
+import { Users, Edit, Mail, CreditCard, UserCheck } from "lucide-react";
+import { format } from "date-fns";
 
 interface UsersContentProps {
   users: any[];
@@ -17,10 +16,13 @@ export function UsersContent({ users, currentUser, searchQuery: q }: UsersConten
   const router = useRouter();
   const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(q);
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "users");
     if (searchQuery) {
       params.set("q", searchQuery);
     } else {
@@ -29,8 +31,21 @@ export function UsersContent({ users, currentUser, searchQuery: q }: UsersConten
     router.push(`/admin?${params.toString()}`);
   };
 
+  const handleEdit = (user: any) => {
+    setSelectedUser(user);
+    setIsModalOpen(true);
+  };
+
+  const totalUsers = users.length;
+  const activeUsers = users.filter((u) => u.isActive).length;
+  // Calculate total using effective balance if available
+  const totalCredits = users.reduce((sum, u) => {
+    const balance = (u as any).effectiveBalance ?? u.creditBalance ?? 0;
+    return sum + balance;
+  }, 0);
+
   return (
-    <div className="mt-8">
+    <div>
       {/* Search Bar */}
       <div className="mb-8">
         <form onSubmit={handleSearch} className="flex gap-3">
@@ -57,122 +72,181 @@ export function UsersContent({ users, currentUser, searchQuery: q }: UsersConten
         </form>
       </div>
 
-      {/* Users List */}
-      <div className="space-y-4">
-        {users.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-200">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
-            <p className="mt-1 text-sm text-gray-500">Try searching with a different query.</p>
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center">
+              <Users className="w-6 h-6 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Total Users</p>
+              <p className="text-2xl font-bold text-gray-900">{totalUsers}</p>
+            </div>
           </div>
-        ) : (
-          users.map((u) => {
-            const balance = u.creditBalance || 0;
-            return (
-              <div
-                key={u.id}
-                className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="p-6">
-                  {/* User Header */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                      <div className="flex-shrink-0">
-                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-semibold text-lg">
-                          {(u.firstName || u.username || u.email)?.[0]?.toUpperCase() || "U"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {u.firstName || u.username || u.email}
-                          </h3>
-                          <span
-                            className={`px-2 py-0.5 text-xs font-medium rounded-md ${
-                              u.role === 'SUPER_ADMIN'
-                                ? 'bg-red-100 text-red-700'
-                                : u.role === 'ADMIN'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-100 text-gray-700'
-                            }`}
-                          >
-                            {u.role}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 text-xs font-medium rounded-md ${
-                              u.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                            }`}
-                          >
-                            {u.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm text-gray-500">{u.email}</p>
-                        <p className="text-xs text-gray-400 font-mono mt-0.5">{u.clerkId}</p>
-                        {u.stripeCustomerId && (
-                          <a
-                            href={`https://dashboard.stripe.com/customers/${u.stripeCustomerId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 mt-2 text-xs text-purple-600 hover:text-purple-700 font-medium transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                            View Stripe Customer
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-gray-500">Credits</p>
-                      <p className="text-2xl font-bold text-gray-900">{balance.toLocaleString()}</p>
-                    </div>
-                  </div>
-
-                  {/* Divider */}
-                  <div className="border-t border-gray-200 my-4"></div>
-
-                  {/* Actions */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Credit Management */}
-                    {canUpdateUserCredits(currentUser.role) && (
-                      <CreditUpdateForm
-                        userId={u.id}
-                        clerkId={u.clerkId}
-                        currentBalance={balance}
-                        searchQuery={q}
-                      />
-                    )}
-
-                    {/* Role Management */}
-                    {canUpdateUserRoles(currentUser.role) && (
-                      <RoleUpdateForm
-                        userId={u.id}
-                        currentRole={u.role}
-                        searchQuery={q}
-                        viewerRole={currentUser.role}
-                        viewerId={currentUser.id}
-                      />
-                    )}
-
-                    {/* User Deactivation */}
-                    {canDeleteUsers(currentUser.role) && u.id !== currentUser.id && (
-                      <UserStatusForm
-                        userId={u.id}
-                        isActive={u.isActive}
-                        searchQuery={q}
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
+              <UserCheck className="w-6 h-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Active Users</p>
+              <p className="text-2xl font-bold text-gray-900">{activeUsers}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
+              <CreditCard className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 font-medium">Total Credits</p>
+              <p className="text-2xl font-bold text-gray-900">{totalCredits.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Users Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  User
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Role
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Credits
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Created
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {users.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                    <Users className="mx-auto h-12 w-12 text-gray-400 mb-3" />
+                    <p className="text-sm font-medium text-gray-900">No users found</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {q ? "Try searching with a different query." : "Users will appear here once they sign up."}
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                users.map((user) => {
+                  const displayName = user.firstName || user.username || user.email;
+                  const initials = displayName[0]?.toUpperCase() || "U";
+                  // Use effectiveBalance if available (includes grants), otherwise fallback to creditBalance
+                  const balance = (user as any).effectiveBalance ?? user.creditBalance ?? 0;
+
+                  return (
+                    <tr key={user.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-shrink-0">
+                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                              {initials}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{displayName}</div>
+                            {user.username && (
+                              <div className="text-xs text-gray-500">@{user.username}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-900">{user.email}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            user.role === 'SUPER_ADMIN'
+                              ? 'bg-red-100 text-red-800'
+                              : user.role === 'ADMIN'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {user.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            user.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {user.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {balance.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {format(new Date(user.createdAt), "MMM d, yyyy")}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleEdit(user);
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Edit Modal */}
+      {selectedUser && (
+        <UserEditModal
+          user={selectedUser}
+          currentUser={currentUser}
+          open={isModalOpen}
+          onOpenChange={(open) => {
+            setIsModalOpen(open);
+            if (!open) {
+              setSelectedUser(null);
+              // Refresh page after modal closes to get updated data
+              router.refresh();
+            }
+          }}
+          searchQuery={q}
+        />
+      )}
     </div>
   );
 }
-

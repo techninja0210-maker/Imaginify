@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Save, Trash2, Edit2, X, AlertTriangle } from "lucide-react";
 
 interface SubscriptionPlanFormProps {
+  onSuccess?: () => void;
   plan?: {
     id: string;
     planFamily: string;
@@ -30,10 +31,10 @@ interface SubscriptionPlanFormProps {
   } | null;
 }
 
-export function SubscriptionPlanForm({ plan }: SubscriptionPlanFormProps) {
+export function SubscriptionPlanForm({ plan, onSuccess }: SubscriptionPlanFormProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const [isEditing, setIsEditing] = useState(!plan);
+  const [isEditing, setIsEditing] = useState(true); // Always start in edit mode for dedicated edit pages
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -113,6 +114,9 @@ export function SubscriptionPlanForm({ plan }: SubscriptionPlanFormProps) {
         });
       }
 
+      if (onSuccess) {
+        onSuccess();
+      }
       router.refresh();
       if (plan) {
         setIsEditing(false);
@@ -172,7 +176,10 @@ export function SubscriptionPlanForm({ plan }: SubscriptionPlanFormProps) {
         description: "Subscription plan deleted successfully",
       });
 
-      router.refresh();
+      // Refresh via window reload since we're in a modal
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
     } catch (error: any) {
       toast({
         title: "Error",

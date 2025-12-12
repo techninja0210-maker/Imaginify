@@ -5,6 +5,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { grantCreditsForSession } from "@/lib/actions/credit-grant.action";
 import { RefreshCw } from "lucide-react";
+import { InlineLoader } from "./Loader";
 
 /**
  * Manual credit grant button - fallback if automatic grant doesn't work
@@ -117,10 +118,7 @@ export function ManualCreditGrant() {
               className="w-full bg-purple-600 hover:bg-purple-700 text-white text-sm"
             >
               {isLoading ? (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
+                <InlineLoader text="Processing..." size="sm" />
               ) : (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4" />

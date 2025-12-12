@@ -1,7 +1,7 @@
 import { requireAdmin } from "@/lib/auth/admin-auth";
 import { prisma } from "@/lib/database/prisma";
-import { AdminTabs } from "@/components/admin/AdminTabs";
 import { format } from "date-fns";
+import Image from "next/image";
 
 export const dynamic = "force-dynamic";
 
@@ -51,15 +51,12 @@ export default async function AmazonProductsPage({
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Admin Console</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Amazon Products</h1>
               <p className="mt-1 text-sm text-gray-500">
-                Welcome back, <span className="font-medium text-gray-700">{currentUser.firstName || currentUser.username}</span>
-                <span className="ml-2 px-2 py-0.5 text-xs font-medium rounded-md bg-purple-100 text-purple-700">
-                  {currentUser.role}
-                </span>
+                View products ingested from backfill actor
               </p>
             </div>
             <div className="text-sm text-gray-600">
@@ -70,16 +67,7 @@ export default async function AmazonProductsPage({
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Navigation Tabs */}
-        <AdminTabs activeTab="amazon-products" />
-        
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">Amazon Products</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            View products ingested from backfill actor
-          </p>
-        </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-8">
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
           <form method="get" className="flex gap-4 items-end">
@@ -158,11 +146,13 @@ export default async function AmazonProductsPage({
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           {product.mainImageUrl && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
+                            <Image
                               src={product.mainImageUrl}
                               alt={product.title || "Product"}
+                              width={48}
+                              height={48}
                               className="w-12 h-12 object-cover rounded"
+                              unoptimized
                             />
                           )}
                           <div>

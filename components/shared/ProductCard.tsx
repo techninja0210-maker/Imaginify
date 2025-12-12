@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Spinner, Loader } from "./Loader";
 import Link from "next/link";
 import { Heart, TrendingUp, Play } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
@@ -396,10 +397,7 @@ export default function ProductCard({
                     <div className="w-full h-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center">
                       <div className="text-center">
                         {shouldShowLoading ? (
-                          <>
-                            <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                            <span className="text-xs text-white/80 font-medium">Loading...</span>
-                          </>
+                          <Loader size="md" text="Loading..." className="text-white" />
                         ) : (
                           <>
                             <Play className="w-10 h-10 text-white fill-white mx-auto mb-1" />

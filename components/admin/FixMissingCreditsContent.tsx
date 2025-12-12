@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
 import { RefreshCw, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { InlineLoader } from "@/components/shared/Loader";
 
 export function FixMissingCreditsContent() {
   const { toast } = useToast();
@@ -88,10 +89,7 @@ export function FixMissingCreditsContent() {
             className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isPending ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Processing...
-              </>
+              <InlineLoader text="Processing..." size="sm" />
             ) : (
               <>
                 <RefreshCw className="w-4 h-4" />

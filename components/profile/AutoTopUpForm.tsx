@@ -5,7 +5,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
+import { InlineLoader } from "@/components/shared/Loader";
 
 interface AutoTopUpFormProps {
   userId: string;
@@ -140,10 +141,7 @@ export function AutoTopUpForm({ userId, currentSettings }: AutoTopUpFormProps) {
         className="w-full bg-purple-600 hover:bg-purple-700 text-white"
       >
         {loading ? (
-          <>
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            Saving...
-          </>
+          <InlineLoader text="Saving..." size="sm" />
         ) : (
           "Save Settings"
         )}

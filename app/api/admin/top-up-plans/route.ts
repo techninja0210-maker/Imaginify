@@ -20,16 +20,16 @@ export async function GET() {
             id: true,
           },
         },
+        autoTopUpSettings: {
+          select: {
+            id: true,
+            isActive: true,
+          },
+        },
       },
     });
 
-    // Add purchase count
-    const plansWithCounts = plans.map((plan) => ({
-      ...plan,
-      purchaseCount: plan.purchases.length,
-    }));
-
-    return NextResponse.json({ plans: plansWithCounts });
+    return NextResponse.json({ success: true, plans });
   } catch (error: any) {
     console.error("[GET /api/admin/top-up-plans] Error:", error);
     return NextResponse.json(
