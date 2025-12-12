@@ -3,6 +3,7 @@ import { SignIn } from '@clerk/nextjs'
 const SignInPage = () => {
   return (
     <SignIn
+      afterSignInUrl="/auth/redirect"
       appearance={{
         elements: {
           headerTitle: 'Shoppable Videos',

@@ -44,32 +44,13 @@ const Home = async ({
   const page = Number(searchParams?.page) || 1;
   const searchQuery = (searchParams?.query as string) || '';
   
-  // Redirect admins to admin panel automatically (unless returning from checkout)
+  // Note: Admins are automatically redirected to /admin after sign-in via /auth/redirect
+  // But they can still access the home page manually if they navigate here
+  // We only redirect if there's a redirect_url param (from protected routes)
   if (userId) {
-    try {
-      const user = await getUserById(userId);
-      if (user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN')) {
-        // Don't redirect if user is returning from Stripe checkout
-        const sessionIdRaw = searchParams?.session_id;
-        const successParamRaw = searchParams?.success;
-        const sessionId = Array.isArray(sessionIdRaw) ? sessionIdRaw[0] : sessionIdRaw as string | undefined;
-        const successParam = Array.isArray(successParamRaw) ? successParamRaw[0] : successParamRaw as string | undefined;
-        const success = successParam === '1' || successParam === 'true';
-        const isReturningFromCheckout = sessionId && success;
-        
-        // Check if there's a redirect_url param (from protected routes)
-        const redirectUrl = searchParams?.redirect_url;
-        if (redirectUrl && typeof redirectUrl === 'string') {
-          redirect(redirectUrl);
-        } else if (!isReturningFromCheckout) {
-          // Only redirect to admin if not returning from checkout
-          redirect('/admin');
-        }
-        // If returning from checkout, allow them to see the success message on home page
-      }
-    } catch (error) {
-      // If user fetch fails, continue to regular home page
-      console.error('[HOME] Failed to check user role:', error);
+    const redirectUrl = searchParams?.redirect_url;
+    if (redirectUrl && typeof redirectUrl === 'string') {
+      redirect(redirectUrl);
     }
   }
 

@@ -47,6 +47,7 @@ const SignUpPage = async ({ searchParams }: SignUpPageProps) => {
 
   return (
     <SignUp
+      afterSignUpUrl="/auth/redirect"
       appearance={{
         elements: {
           headerTitle: 'Shoppable Videos',

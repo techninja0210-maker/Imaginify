@@ -51,8 +51,15 @@ export function ProfileDropdown({ avatarSize = 40 }: ProfileDropdownProps) {
   }, [isOpen]);
 
   const handleSignOut = async () => {
-    await signOut();
-    router.push('/');
+    try {
+      await signOut();
+      // Force a full page reload to ensure clean state
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Sign out error:', error);
+      // Fallback: force redirect even if signOut fails
+      window.location.href = '/';
+    }
   };
 
   const handleMenuItemClick = () => {

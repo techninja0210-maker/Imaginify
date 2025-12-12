@@ -1,7 +1,7 @@
 import { authMiddleware } from "@clerk/nextjs";
  
 export default authMiddleware({
-  publicRoutes: ['/', '/pricing', '/legal/terms', '/legal/privacy', '/api/webhooks/clerk', '/api/webhooks/stripe', '/api/health/db', '/api/cron/keepalive', '/api/cron/auto-topup', '/api/cron/check-low-balance', '/api/credits/deductions', '/api/products/amazon/ingest', '/auth/denied'],
+  publicRoutes: ['/', '/pricing', '/legal/terms', '/legal/privacy', '/api/webhooks/clerk', '/api/webhooks/stripe', '/api/health/db', '/api/cron/keepalive', '/api/cron/auto-topup', '/api/cron/check-low-balance', '/api/credits/deductions', '/api/products/amazon/ingest', '/auth/denied', '/auth/redirect'],
   
   // Note: Gmail validation is enforced at:
   // 1. Webhook level (user.created) - deletes non-Gmail users in Clerk

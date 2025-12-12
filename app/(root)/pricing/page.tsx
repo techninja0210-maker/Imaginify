@@ -3,6 +3,7 @@ import { SubscriptionForm } from "@/components/shared/SubscriptionForm";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 import { prisma } from "@/lib/database/prisma";
+import { isDbDown } from "@/lib/errors";
 
 const PricingPage = async () => {
   // Fetch active subscription plans from database
@@ -10,16 +11,34 @@ const PricingPage = async () => {
   // - Active for new signups (isActiveForNewSignups = true)
   // - Not legacy-only (isLegacyOnly = false)
   // - Not hidden (isHidden = false)
-  const dbPlans = await prisma.subscriptionPlan.findMany({
-    where: {
-      isActiveForNewSignups: true,
-      isLegacyOnly: false,
-      isHidden: false,
-    },
-    orderBy: [
-      { priceUsd: "asc" }, // Sort by price ascending
-    ],
-  });
+  let dbPlans: Array<{
+    id: string;
+    internalId: string;
+    publicName: string;
+    priceUsd: number;
+    stripePriceId: string | null;
+    planFamily: string;
+    creditsPerCycle: number;
+    isDefaultForSignup: boolean;
+  }> = [];
+  let dbError = false;
+  
+  try {
+    dbPlans = await prisma.subscriptionPlan.findMany({
+      where: {
+        isActiveForNewSignups: true,
+        isLegacyOnly: false,
+        isHidden: false,
+      },
+      orderBy: [
+        { priceUsd: "asc" }, // Sort by price ascending
+      ],
+    });
+  } catch (error: any) {
+    console.error('[PRICING] Failed to fetch subscription plans:', error);
+    dbError = isDbDown(error);
+    // Continue with empty plans array - will use fallback plans
+  }
 
   // Transform database plans to UI format
   // If no plans in DB, fallback to hardcoded plans
@@ -119,6 +138,14 @@ const PricingPage = async () => {
             <p className="text-sm text-gray-500">
               All plans include access to our AI-powered transformation tools
             </p>
+            {dbError && (
+              <div className="mt-6 inline-flex items-center px-4 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                Showing default pricing. Database connection unavailable.
+              </div>
+            )}
           </div>
         </div>
       </div>
