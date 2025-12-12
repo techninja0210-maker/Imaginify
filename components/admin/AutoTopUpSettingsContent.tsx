@@ -33,6 +33,8 @@ interface TopUpPlan {
   publicName: string;
   priceUsd: number;
   creditsGranted: number;
+  stripePriceId: string | null;
+  isActive: boolean;
 }
 
 export function AutoTopUpSettingsContent() {
@@ -49,6 +51,7 @@ export function AutoTopUpSettingsContent() {
 
   useEffect(() => {
     fetchSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchSettings() {

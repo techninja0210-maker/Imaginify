@@ -158,6 +158,7 @@ export default async function AmazonProductsPage({
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           {product.mainImageUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={product.mainImageUrl}
                               alt={product.title || "Product"}
