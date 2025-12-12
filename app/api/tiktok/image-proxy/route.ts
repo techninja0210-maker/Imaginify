@@ -12,6 +12,11 @@ import { NextRequest, NextResponse } from "next/server";
  * This is necessary because TikTok CDN URLs contain signed parameters
  * (x-expires, x-signature) that expire after a certain time.
  */
+
+// Force dynamic rendering for this API route
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -53,72 +58,70 @@ export async function GET(request: NextRequest) {
             "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400", // Cache for 1 hour
           },
         });
-      } else if (response.status === 403) {
-        // URL expired - return a placeholder or attempt refresh
-        console.warn(`[TikTok Image Proxy] URL expired (403): ${imageUrl.substring(0, 100)}`);
+      } else if (response.status === 403 || response.status === 404) {
+        // URL expired or not found - return 404 with special header to indicate expiration
+        console.warn(`[TikTok Image Proxy] URL expired/not found (${response.status}): ${imageUrl.substring(0, 100)}`);
         
-        // Return a 1x1 transparent pixel as placeholder
-        const transparentPixel = Buffer.from(
-          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-          "base64"
+        // Return 404 JSON response instead of image so Image component's onError fires
+        // This allows the client to detect the failure and fetch a fresh thumbnail
+        return NextResponse.json(
+          { error: "Image expired or not available", expired: true },
+          {
+            status: 404,
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control": "public, max-age=300", // Cache 404s for 5 minutes
+              "X-Image-Expired": "true", // Custom header to identify expired images
+            },
+          }
         );
-
-        return new NextResponse(transparentPixel, {
-          status: 404, // Indicate image not available
-          headers: {
-            "Content-Type": "image/png",
-            "Cache-Control": "public, max-age=300", // Cache 404s for 5 minutes
-          },
-        });
       } else {
         // Other error status
         console.warn(`[TikTok Image Proxy] Failed to fetch image (${response.status}): ${imageUrl.substring(0, 100)}`);
         
-        const transparentPixel = Buffer.from(
-          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-          "base64"
+        // Return 404 JSON so onError fires
+        return NextResponse.json(
+          { error: "Failed to fetch image", status: response.status },
+          {
+            status: 404,
+            headers: {
+              "Content-Type": "application/json",
+              "Cache-Control": "public, max-age=300",
+            },
+          }
         );
-
-        return new NextResponse(transparentPixel, {
-          status: 404,
-          headers: {
-            "Content-Type": "image/png",
-            "Cache-Control": "public, max-age=300",
-          },
-        });
       }
     } catch (fetchError: any) {
       // Network error or timeout
       console.warn(`[TikTok Image Proxy] Fetch error: ${fetchError?.message || fetchError}`);
       
-      const transparentPixel = Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-        "base64"
+      // Return JSON error so Image component's onError fires
+      return NextResponse.json(
+        { error: "Network error or timeout", expired: false },
+        {
+          status: 404,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "public, max-age=300",
+            "X-Image-Expired": "false",
+          },
+        }
       );
-
-      return new NextResponse(transparentPixel, {
-        status: 404,
-        headers: {
-          "Content-Type": "image/png",
-          "Cache-Control": "public, max-age=300",
-        },
-      });
     }
   } catch (error: any) {
     console.error(`[TikTok Image Proxy] Unexpected error: ${error?.message || error}`);
     
-    const transparentPixel = Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-      "base64"
+    // Return JSON error so Image component's onError fires
+    return NextResponse.json(
+      { error: "Internal server error" },
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
+        },
+      }
     );
-
-    return new NextResponse(transparentPixel, {
-      status: 500,
-      headers: {
-        "Content-Type": "image/png",
-        "Cache-Control": "no-cache",
-      },
-    });
   }
 }
 
