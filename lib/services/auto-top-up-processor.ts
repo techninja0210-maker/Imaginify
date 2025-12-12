@@ -144,14 +144,10 @@ export async function checkAndProcessAutoTopUp(
     // - No saved payment method
     // - Payment requires authentication
     // - Direct charge failed
-    const baseUrl = process.env.NEXT_PUBLIC_SERVER_URL || "https://shoppablevideos.com";
-    const isDevelopment = baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1");
-    const successUrl = isDevelopment 
-      ? `http://localhost:3000/billing?success=1&auto_top_up=1`
-      : `${baseUrl}/billing?success=1&auto_top_up=1`;
-    const cancelUrl = isDevelopment 
-      ? `http://localhost:3000/billing?canceled=1&auto_top_up=1`
-      : `${baseUrl}/billing?canceled=1&auto_top_up=1`;
+    const { getBaseUrl } = await import('@/lib/utils');
+    const baseUrl = getBaseUrl();
+    const successUrl = `${baseUrl}/billing?success=1&auto_top_up=1`;
+    const cancelUrl = `${baseUrl}/billing?canceled=1&auto_top_up=1`;
 
     const session = await stripe.checkout.sessions.create({
       customer: user.stripeCustomerId,

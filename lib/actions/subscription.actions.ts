@@ -50,21 +50,8 @@ export async function startSubscriptionCheckout(
     metadata.rewardful_referral = rewardfulReferral;
   }
 
-  // Determine the base URL - detect development vs production
-  const getBaseUrl = () => {
-    const isDevelopment = process.env.NODE_ENV === 'development' || 
-                         !process.env.NEXT_PUBLIC_SERVER_URL ||
-                         process.env.NEXT_PUBLIC_SERVER_URL.includes('localhost') ||
-                         process.env.NEXT_PUBLIC_SERVER_URL.includes('127.0.0.1') ||
-                         process.env.NEXT_PUBLIC_SERVER_URL.includes('192.168');
-    
-    if (isDevelopment) {
-      return 'http://localhost:3000';
-    }
-    
-    return process.env.NEXT_PUBLIC_SERVER_URL || 'https://shoppablevideos.com';
-  };
-
+  // Get base URL - works in development and Vercel production
+  const { getBaseUrl } = await import('@/lib/utils');
   const baseUrl = getBaseUrl();
 
   const session = await stripe.checkout.sessions.create({
@@ -88,23 +75,13 @@ export async function openCustomerPortal(customerId: string) {
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-  // Determine the base URL for return URL
-  const getBaseUrl = () => {
-    const isDevelopment = process.env.NODE_ENV === 'development' || 
-                         !process.env.NEXT_PUBLIC_SERVER_URL ||
-                         process.env.NEXT_PUBLIC_SERVER_URL.includes('localhost') ||
-                         process.env.NEXT_PUBLIC_SERVER_URL.includes('127.0.0.1');
-    
-    if (isDevelopment) {
-      return 'http://localhost:3000';
-    }
-    
-    return process.env.NEXT_PUBLIC_SERVER_URL || 'https://shoppablevideos.com';
-  };
+  // Get base URL - works in development and Vercel production
+  const { getBaseUrl } = await import('@/lib/utils');
+  const baseUrl = getBaseUrl();
 
   const portal = await stripe.billingPortal.sessions.create({
     customer: customerId,
-    return_url: `${getBaseUrl()}/billing`,
+    return_url: `${baseUrl}/billing`,
   });
 
   redirect(portal.url);

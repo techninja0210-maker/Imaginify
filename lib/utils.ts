@@ -182,3 +182,38 @@ export function requireGmailEmail(email: string, context: string = 'sign-up'): v
     );
   }
 }
+
+/**
+ * Get the base URL for the application
+ * Works in both development and production (including Vercel)
+ * 
+ * Priority:
+ * 1. VERCEL_URL (automatically provided by Vercel, add https://)
+ * 2. NEXT_PUBLIC_SERVER_URL (manually configured, if not localhost)
+ * 3. Production fallback (shoppablevideos.com)
+ * 4. Localhost (development only)
+ */
+export function getBaseUrl(): string {
+  // Vercel automatically provides VERCEL_URL (e.g., "your-app.vercel.app")
+  // We need to add https:// protocol
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  // Check if NEXT_PUBLIC_SERVER_URL is set and valid (not localhost)
+  if (process.env.NEXT_PUBLIC_SERVER_URL) {
+    const url = process.env.NEXT_PUBLIC_SERVER_URL;
+    // Don't use localhost URLs in production
+    if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
+      return url;
+    }
+  }
+
+  // In development, use localhost
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3000';
+  }
+
+  // Production fallback
+  return 'https://shoppablevideos.com';
+}

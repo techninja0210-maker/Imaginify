@@ -26,27 +26,10 @@ export async function checkoutCredits(
     metadata.rewardful_referral = rewardfulReferral;
   }
 
-  // Determine the base URL - detect development vs production
-  // In development, always use localhost to avoid redirecting to production
-  const getBaseUrl = () => {
-    // Check if we're in development mode
-    const isDevelopment = process.env.NODE_ENV === 'development' || 
-                         !process.env.NEXT_PUBLIC_SERVER_URL ||
-                         process.env.NEXT_PUBLIC_SERVER_URL.includes('localhost') ||
-                         process.env.NEXT_PUBLIC_SERVER_URL.includes('127.0.0.1') ||
-                         process.env.NEXT_PUBLIC_SERVER_URL.includes('192.168');
-    
-    if (isDevelopment) {
-      // In development, always use localhost
-      return 'http://localhost:3000';
-    }
-    
-    // In production, use the configured URL
-    return process.env.NEXT_PUBLIC_SERVER_URL || 'https://shoppablevideos.com';
-  };
-
+  // Get base URL - works in development and Vercel production
+  const { getBaseUrl } = await import('@/lib/utils');
   const baseUrl = getBaseUrl();
-  console.log(`[CHECKOUT] Using base URL for Stripe redirect: ${baseUrl} (NODE_ENV: ${process.env.NODE_ENV})`);
+  console.log(`[CHECKOUT] Using base URL for Stripe redirect: ${baseUrl} (NODE_ENV: ${process.env.NODE_ENV}, VERCEL_URL: ${process.env.VERCEL_URL || 'not set'})`);
 
   const session = await stripe.checkout.sessions.create({
     line_items: [
