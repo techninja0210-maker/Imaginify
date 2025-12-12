@@ -98,11 +98,18 @@ export default function ProductCard({
   };
 
   // Get safe image URL - use placeholder if invalid
+  // For TikTok CDN URLs, route through our proxy to handle expired URLs
   const getSafeImageUrl = (
     url: string | undefined | null,
     fallback: string = "/img/product-placeholder.png"
   ) => {
     if (!url || !isValidImageUrl(url)) return fallback;
+    
+    // Route TikTok CDN URLs through our proxy to handle expired signatures
+    if (url.includes("tiktokcdn") || (url.includes("tiktok.com") && url.includes("image"))) {
+      return `/api/tiktok/image-proxy?url=${encodeURIComponent(url)}`;
+    }
+    
     return url;
   };
 
@@ -333,7 +340,12 @@ export default function ProductCard({
                 if (thumbnail && isValidImageUrl(thumbnail)) {
                   // Make sure thumbnail URL is a real image URL, not a video URL
                   if (!thumbnail.includes('/video/') && !thumbnail.includes('#thumbnail')) {
-                    imageSrc = thumbnail;
+                    // Route TikTok CDN URLs through proxy to handle expired signatures
+                    if (thumbnail.includes("tiktokcdn") || thumbnail.includes("tiktok.com")) {
+                      imageSrc = `/api/tiktok/image-proxy?url=${encodeURIComponent(thumbnail)}`;
+                    } else {
+                      imageSrc = thumbnail;
+                    }
                   } else {
                     console.warn(`[ProductCard] Invalid thumbnail URL (video URL detected): ${thumbnail}`);
                     imageSrc = null;
@@ -375,16 +387,52 @@ export default function ProductCard({
                           ...prev,
                           [originalIndex]: true,
                         }));
-                        // Clear TikTok thumbnail on error
-                        if (isTikTokVideo) {
-                          setTiktokThumbnails((prev) => ({
-                            ...prev,
-                            [originalIndex]: null,
-                          }));
-                          setTiktokFetchComplete((prev) => ({
-                            ...prev,
-                            [originalIndex]: true,
-                          }));
+                        
+                        // For TikTok videos, if stored thumbnail fails, try fetching fresh thumbnail
+                        if (isTikTokVideo && videoUrl) {
+                          const videoUrlString = typeof videoUrl === 'string' ? videoUrl : videoUrl;
+                          
+                          // Only retry if we haven't already fetched for this video
+                          if (!fetchedRef.current.has(videoUrlString)) {
+                            fetchedRef.current.add(videoUrlString);
+                            
+                            // Fetch fresh thumbnail via API
+                            fetch(`/api/tiktok/thumbnail?url=${encodeURIComponent(videoUrlString)}`, {
+                              signal: AbortSignal.timeout(10000),
+                            })
+                              .then((response) => response.json())
+                              .then((data) => {
+                                if (data.thumbnailUrl) {
+                                  // Update with fresh thumbnail (route through proxy)
+                                  setTiktokThumbnails((prev) => ({
+                                    ...prev,
+                                    [originalIndex]: `/api/tiktok/image-proxy?url=${encodeURIComponent(data.thumbnailUrl)}`,
+                                  }));
+                                  // Clear error state since we got a fresh thumbnail
+                                  setThumbnailErrors((prev) => {
+                                    const updated = { ...prev };
+                                    delete updated[originalIndex];
+                                    return updated;
+                                  });
+                                }
+                              })
+                              .catch((err) => {
+                                // Silently handle - placeholder will show
+                                console.warn(`[ProductCard] Failed to fetch fresh thumbnail: ${err.message}`);
+                              })
+                              .finally(() => {
+                                setTiktokFetchComplete((prev) => ({
+                                  ...prev,
+                                  [originalIndex]: true,
+                                }));
+                              });
+                          } else {
+                            // Already tried fetching, mark as complete
+                            setTiktokFetchComplete((prev) => ({
+                              ...prev,
+                              [originalIndex]: true,
+                            }));
+                          }
                         }
                       }}
                       onLoad={() => {
