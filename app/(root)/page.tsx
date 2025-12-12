@@ -5,6 +5,7 @@ import { getUserById } from "@/lib/actions/user.actions"
 import { auth } from "@clerk/nextjs"
 import Image from "next/image"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import { prisma } from "@/lib/database/prisma"
 import Stripe from "stripe"
 import dynamicImport from "next/dynamic"
@@ -42,6 +43,35 @@ const Home = async ({
   const { userId } = auth();
   const page = Number(searchParams?.page) || 1;
   const searchQuery = (searchParams?.query as string) || '';
+  
+  // Redirect admins to admin panel automatically (unless returning from checkout)
+  if (userId) {
+    try {
+      const user = await getUserById(userId);
+      if (user && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN')) {
+        // Don't redirect if user is returning from Stripe checkout
+        const sessionIdRaw = searchParams?.session_id;
+        const successParamRaw = searchParams?.success;
+        const sessionId = Array.isArray(sessionIdRaw) ? sessionIdRaw[0] : sessionIdRaw as string | undefined;
+        const successParam = Array.isArray(successParamRaw) ? successParamRaw[0] : successParamRaw as string | undefined;
+        const success = successParam === '1' || successParam === 'true';
+        const isReturningFromCheckout = sessionId && success;
+        
+        // Check if there's a redirect_url param (from protected routes)
+        const redirectUrl = searchParams?.redirect_url;
+        if (redirectUrl && typeof redirectUrl === 'string') {
+          redirect(redirectUrl);
+        } else if (!isReturningFromCheckout) {
+          // Only redirect to admin if not returning from checkout
+          redirect('/admin');
+        }
+        // If returning from checkout, allow them to see the success message on home page
+      }
+    } catch (error) {
+      // If user fetch fails, continue to regular home page
+      console.error('[HOME] Failed to check user role:', error);
+    }
+  }
 
   // Auto-grant credits if returning from successful Stripe checkout
   // Log all searchParams to debug
