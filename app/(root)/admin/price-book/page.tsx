@@ -91,9 +91,6 @@ const PriceBookPage = async () => {
                     Pipeline Key
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Credits
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -110,7 +107,7 @@ const PriceBookPage = async () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {entries.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                       <DollarSign className="mx-auto h-12 w-12 text-gray-400 mb-3" />
                       <p className="text-sm font-medium text-gray-900">No price book entries</p>
                       <p className="text-xs text-gray-500 mt-1">Get started by creating your first entry.</p>
@@ -129,11 +126,8 @@ const PriceBookPage = async () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{entry.pipelineKey}</div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">{entry.description || "—"}</div>
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {entry.creditsCost} credits
+                        {entry.creditCost} credits
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {entry.active ? (

@@ -27,7 +27,7 @@ interface UserEditModalProps {
   };
   currentUser: {
     id: string;
-    role: string;
+    role: string | "USER" | "ADMIN" | "SUPER_ADMIN";
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -96,7 +96,7 @@ export function UserEditModal({
           {/* Actions */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Credit Management */}
-            {canUpdateUserCredits(currentUser.role) && (
+            {canUpdateUserCredits(currentUser.role as "USER" | "ADMIN" | "SUPER_ADMIN") && (
               <div className="border border-gray-200 rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-gray-900 mb-3">Credits</h4>
                 <CreditUpdateForm
@@ -109,7 +109,7 @@ export function UserEditModal({
             )}
 
             {/* Role Management */}
-            {canUpdateUserRoles(currentUser.role) && (
+            {canUpdateUserRoles(currentUser.role as "USER" | "ADMIN" | "SUPER_ADMIN") && (
               <div className="border border-gray-200 rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-gray-900 mb-3">Role</h4>
                 <RoleUpdateForm
@@ -123,7 +123,7 @@ export function UserEditModal({
             )}
 
             {/* User Status */}
-            {canDeleteUsers(currentUser.role) && user.id !== currentUser.id && (
+            {canDeleteUsers(currentUser.role as "USER" | "ADMIN" | "SUPER_ADMIN") && user.id !== currentUser.id && (
               <div className="border border-gray-200 rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-gray-900 mb-3">Status</h4>
                 <UserStatusForm

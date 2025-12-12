@@ -25,8 +25,8 @@ interface SubscriptionPlanModalProps {
     isLegacyOnly: boolean;
     isHidden: boolean;
     isDefaultForSignup: boolean;
-    upgradeAllowedTo: string[];
-    downgradeAllowedTo: string[];
+    upgradeAllowedTo?: string[];
+    downgradeAllowedTo?: string[];
     subscriptions?: Array<{ id: string }>;
   } | null;
   open: boolean;

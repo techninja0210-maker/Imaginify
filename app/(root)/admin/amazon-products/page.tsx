@@ -1,7 +1,6 @@
 import { requireAdmin } from "@/lib/auth/admin-auth";
 import { prisma } from "@/lib/database/prisma";
 import { format } from "date-fns";
-import Image from "next/image";
 
 export const dynamic = "force-dynamic";
 
@@ -146,13 +145,13 @@ export default async function AmazonProductsPage({
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           {product.mainImageUrl && (
-                            <Image
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
                               src={product.mainImageUrl}
                               alt={product.title || "Product"}
                               width={48}
                               height={48}
                               className="w-12 h-12 object-cover rounded"
-                              unoptimized
                             />
                           )}
                           <div>

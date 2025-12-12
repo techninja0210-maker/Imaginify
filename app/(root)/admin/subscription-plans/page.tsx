@@ -22,6 +22,8 @@ interface SubscriptionPlan {
   isLegacyOnly: boolean;
   isHidden: boolean;
   isDefaultForSignup: boolean;
+  upgradeAllowedTo?: string[];
+  downgradeAllowedTo?: string[];
   createdAt: string | Date;
   subscriptions: Array<{ id: string }>;
 }
@@ -253,19 +255,21 @@ export default function SubscriptionPlansPage() {
       </div>
 
       {/* Modal */}
-      <SubscriptionPlanModal
-        plan={selectedPlan || null}
-        open={isModalOpen}
-        onOpenChange={(open) => {
-          setIsModalOpen(open);
-          if (!open) {
-            setSelectedPlan(null); // Clear selection when modal closes
-          }
-        }}
-        onSuccess={() => {
-          fetchPlans(); // Only refresh data after successful save
-        }}
-      />
+      {isModalOpen && (
+        <SubscriptionPlanModal
+          plan={selectedPlan || undefined}
+          open={isModalOpen}
+          onOpenChange={(open) => {
+            setIsModalOpen(open);
+            if (!open) {
+              setSelectedPlan(null); // Clear selection when modal closes
+            }
+          }}
+          onSuccess={() => {
+            fetchPlans(); // Only refresh data after successful save
+          }}
+        />
+      )}
     </div>
   );
 }

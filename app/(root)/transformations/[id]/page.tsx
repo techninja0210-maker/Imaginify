@@ -1,5 +1,4 @@
 import { auth } from "@clerk/nextjs";
-import Image from "next/image";
 import Link from "next/link";
 
 import Header from "@/components/shared/Header";
@@ -63,11 +62,12 @@ const ImageDetails = async ({ params: { id } }: SearchParamProps) => {
           <div className="flex flex-col gap-4">
             <h3 className="h3-bold text-dark-600">Original</h3>
 
-            <Image
-              width={400}
-              height={400}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src="/assets/images/placeholder.jpg"
               alt="job"
+              width={400}
+              height={400}
               className="transformation-original_image"
             />
           </div>
