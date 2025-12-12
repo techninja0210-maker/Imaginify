@@ -1,22 +1,20 @@
-import MobileNav from '@/components/shared/MobileNav'
-import Sidebar from '@/components/shared/Sidebar'
+import TopNavbar from '@/components/shared/TopNavbar'
 import { Toaster } from '@/components/ui/toaster'
 import { LowBalanceBanner } from '@/components/shared/LowBalanceBanner'
 import Link from 'next/link'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
-    <main className="root">
-      <Sidebar />
-      <MobileNav />
+    <main className="min-h-screen bg-white">
+      <TopNavbar />
       <LowBalanceBanner />
 
-      <div className="root-container">
-        <div className="wrapper">
+      <div className="min-h-[calc(100vh-4rem)]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
           {children}
         </div>
-        <footer className="px-6 pb-6">
-          <div className="wrapper flex items-center justify-between border-t border-gray-200 pt-4 text-sm text-dark-600">
+        <footer className="pb-6 mt-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-8 flex items-center justify-between border-t border-gray-200 pt-4 text-sm text-dark-600">
             <div className="flex gap-4">
               <Link href="/pricing">Pricing</Link>
               <Link href="/legal/terms">Terms</Link>

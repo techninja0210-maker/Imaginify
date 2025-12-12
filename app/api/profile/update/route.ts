@@ -66,7 +66,6 @@ export async function POST(req: NextRequest) {
 
     // Revalidate profile pages
     revalidatePath('/profile');
-    revalidatePath('/profile/edit');
 
     return NextResponse.json({
       success: true,

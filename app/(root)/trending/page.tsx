@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import Link from 'next/link'
-import { UserButton, useUser } from '@clerk/nextjs'
+import { useUser } from '@clerk/nextjs'
+import { ProfileDropdown } from '@/components/shared/ProfileDropdown'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -83,6 +84,7 @@ export default function TrendingProductsPage() {
     const hideLayoutElements = () => {
       const sidebar = document.querySelector('aside.sidebar')
       const mobileNav = document.querySelector('header.header')
+      const topNavbar = document.querySelector('header') // Hide the TopNavbar from layout
       const footer = document.querySelector('footer')
       const lowBalanceBanner = document.querySelector('[class*="LowBalanceBanner"]')
       const wrapper = document.querySelector('.root-container .wrapper')
@@ -92,6 +94,10 @@ export default function TrendingProductsPage() {
       }
       if (mobileNav instanceof HTMLElement) {
         mobileNav.style.cssText += 'display: none !important;'
+      }
+      // Hide TopNavbar from layout if it exists (not the one in trending page)
+      if (topNavbar && !topNavbar.closest('[data-trending-page="true"]')) {
+        topNavbar.style.cssText += 'display: none !important;'
       }
       if (footer instanceof HTMLElement) {
         footer.style.cssText += 'display: none !important;'
@@ -410,36 +416,70 @@ export default function TrendingProductsPage() {
     >
       <div className="flex-1 overflow-auto">
         <div className="max-w-7xl px-4 sm:px-8 mx-auto">
-          {/* Top Navigation Bar */}
-          <header className="w-full bg-white px-6">
-            <div className="flex items-center justify-between">
-              <Link href="/" className="flex items-center">
+          {/* Top Navigation Bar - Now using the shared TopNavbar component */}
+          <div className="w-full bg-white sticky top-0 z-50">
+            <div className="flex items-center justify-between h-16 px-6">
+              {/* Logo */}
+              <Link href="/" className="flex items-center flex-shrink-0">
                 <Image
                   src="/img/logo.png"
                   alt="Shoppable Videos"
-                  width={180}
-                  height={40}
-                  className="hidden md:block"
+                  width={170}
+                  height={38}
+                  className="hidden md:block h-[38px] w-auto"
                   priority
                 />
                 <Image
                   src="/img/logo-responsive.png"
                   alt="Shoppable Videos"
-                  width={120}
-                  height={40}
-                  className="block md:hidden"
+                  width={115}
+                  height={34}
+                  className="block md:hidden h-[34px] w-auto"
                   priority
                 />
               </Link>
 
-              <div className="flex items-center gap-4">
-                <button className="p-2 hover:bg-gray-100 rounded-full transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
+              {/* Navigation Links - Hidden on mobile */}
+              <nav className="hidden lg:flex items-center gap-0.5 ml-auto mr-8">
+                {[
+                  { label: "Home", route: "/" },
+                  { label: "Trending", route: "/trending" },
+                  { label: "TikTok", route: "/tiktok-analyzer" },
+                  { label: "Amazon", route: "/amazon-analyzer" },
+                  { label: "Favorites", route: "/favorites" },
+                  { label: "Billing", route: "/billing" },
+                  { label: "Support", route: "/support" },
+                  { label: "Affiliate", route: "/affiliate" },
+                ].map((link) => {
+                  const isActive = link.route === "/trending"
+                  return (
+                    <Link
+                      key={link.route}
+                      href={link.route}
+                      className={`px-3 py-2 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                        isActive
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                      }`}
+                    >
+                      {link.label}
+                    </Link>
+                  )
+                })}
+              </nav>
+
+              {/* Right side: Bell and User Button */}
+              <div className="flex items-center gap-4 flex-shrink-0">
+                <button 
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
+                  aria-label="Notifications"
+                >
                   <Bell className="w-5 h-5 text-gray-600" />
                 </button>
-                <UserButton afterSignOutUrl="/" />
+                <ProfileDropdown />
               </div>
             </div>
-          </header>
+          </div>
 
           {/* Page Header Section */}
           <div className="flex items-start justify-between bg-white px-4 sm:px-6 py-4 sm:py-6">
