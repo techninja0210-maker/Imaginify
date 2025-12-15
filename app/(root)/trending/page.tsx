@@ -31,11 +31,12 @@ interface TrendingProductData {
   displayImageUrl: string
   sales7d: number
   commission: string
-  videoThumbnails: string[]
+  videoThumbnails: string[] | Array<{ url: string; thumbnailUrl: string | null }>
   isFavorite: boolean
   tiktokProductUrl: string
   amazonUrl?: string
   category?: string
+  amazonAllImages?: any[] | null // Amazon product's allImages array for high-res images
 }
 
 export default function TrendingProductsPage() {
