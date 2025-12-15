@@ -67,7 +67,7 @@ export function getHighResAmazonImageUrl(
   
   for (const size of highResSizes) {
     // Replace _AC_SL{any_number}_ with _AC_SL{size}_
-    const highResUrl = imageUrl.replace(/_AC_SL\d+_/g, `_AC_SL${size}_`);
+    const highResUrl: string = imageUrl.replace(/_AC_SL\d+_/g, `_AC_SL${size}_`);
     
     // If URL changed, return the high-res version
     if (highResUrl !== imageUrl) {
@@ -96,9 +96,10 @@ export function getHighResAmazonImageUrl(
  */
 export function getAmazonImageSizes(imageUrl: string): number[] {
   const sizes: number[] = [];
-  const matches = imageUrl.matchAll(/_AC_SL(\d+)_/g);
+  const regex = /_AC_SL(\d+)_/g;
+  let match: RegExpExecArray | null;
   
-  for (const match of matches) {
+  while ((match = regex.exec(imageUrl)) !== null) {
     const size = parseInt(match[1], 10);
     if (!sizes.includes(size)) {
       sizes.push(size);
