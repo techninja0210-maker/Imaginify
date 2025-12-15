@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Heart, TrendingUp, Play } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { extractTikTokVideoId } from "@/lib/utils/tiktok-thumbnail";
+import { getHighResAmazonImageUrl } from "@/lib/utils/amazon-image";
 
 interface ProductCardProps {
   rank: number;
@@ -18,6 +19,7 @@ interface ProductCardProps {
   isFavorite?: boolean;
   onFavoriteToggle?: () => void;
   amazonUrl?: string;
+  amazonAllImages?: any[] | null; // Amazon product's allImages array for high-res images
 }
 
 // Helper function to check if URL is a valid image URL
@@ -63,6 +65,43 @@ function isValidImageUrl(url: string | undefined | null): boolean {
   return false;
 }
 
+// Client-side cache for TikTok thumbnails
+const TIKTOK_THUMBNAIL_CACHE_KEY = 'tiktok_thumbnail_cache';
+const TIKTOK_THUMBNAIL_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+function getTikTokThumbnailCache() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const cached = sessionStorage.getItem(TIKTOK_THUMBNAIL_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      // Filter out expired entries
+      const now = Date.now();
+      const freshCache: Record<string, { url: string | null; timestamp: number }> = {};
+      for (const key in parsed) {
+        if (parsed[key].timestamp && (now - parsed[key].timestamp < TIKTOK_THUMBNAIL_CACHE_TTL)) {
+          freshCache[key] = parsed[key];
+        }
+      }
+      return freshCache;
+    }
+  } catch (e) {
+    console.error("Failed to parse TikTok thumbnail cache from sessionStorage", e);
+  }
+  return {};
+}
+
+function setTikTokThumbnailCache(key: string, url: string | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    const cache = getTikTokThumbnailCache();
+    cache[key] = { url, timestamp: Date.now() };
+    sessionStorage.setItem(TIKTOK_THUMBNAIL_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.error("Failed to set TikTok thumbnail cache in sessionStorage", e);
+  }
+}
+
 export default function ProductCard({
   rank,
   productName,
@@ -73,9 +112,12 @@ export default function ProductCard({
   isFavorite = false,
   onFavoriteToggle,
   amazonUrl,
+  amazonAllImages,
 }: ProductCardProps) {
   const [isFav, setIsFav] = useState(isFavorite);
   const [imageError, setImageError] = useState(false);
+  const [displayImage, setDisplayImage] = useState<string | null>(displayImageUrl); // Current display image URL
+  const [displayImageLoading, setDisplayImageLoading] = useState(false);
   const [thumbnailErrors, setThumbnailErrors] = useState<
     Record<number, boolean>
   >({});
@@ -88,6 +130,7 @@ export default function ProductCard({
   const fetchedRef = useRef<Set<string>>(new Set()); // Track which video URLs we've fetched
   const failedFetchesRef = useRef<Set<string>>(new Set()); // Track which URLs have failed (don't retry)
   const retryAttemptsRef = useRef<Map<string, number>>(new Map()); // Track retry attempts per URL
+  const displayImageFetchedRef = useRef<boolean>(false); // Track if we've tried to fetch a fresh display image
   
   // Load failed fetches from sessionStorage on mount to prevent redundant API calls
   useEffect(() => {
@@ -113,20 +156,82 @@ export default function ProductCard({
   };
 
   // Get safe image URL - use placeholder if invalid
-  // For TikTok CDN URLs, route through our proxy to handle expired URLs
+  // For Amazon images, try to get high-resolution version
+  // For TikTok CDN URLs, use directly (they might be fresh)
   const getSafeImageUrl = (
     url: string | undefined | null,
     fallback: string = "/img/product-placeholder.png"
   ) => {
     if (!url || !isValidImageUrl(url)) return fallback;
     
-    // Route TikTok CDN URLs through our proxy to handle expired signatures
-    if (url.includes("tiktokcdn") || (url.includes("tiktok.com") && url.includes("image"))) {
-      return `/api/tiktok/image-proxy?url=${encodeURIComponent(url)}`;
+    // For Amazon images, try to get high-resolution version
+    if (url.includes('amazon.com') || url.includes('media-amazon.com')) {
+      const highResUrl = getHighResAmazonImageUrl(url, amazonAllImages);
+      return highResUrl || url;
     }
     
+    // For TikTok CDN URLs, use directly (they might be fresh)
+    // If they fail, onError will handle fetching a fresh one
     return url;
   };
+
+  // Check if displayImageUrl is a TikTok CDN URL that might expire
+  const isTikTokCdnUrl = displayImageUrl && (
+    displayImageUrl.includes("tiktokcdn") || 
+    (displayImageUrl.includes("tiktok.com") && displayImageUrl.includes("image"))
+  );
+
+  // Fetch fresh display image from first video thumbnail if display image fails
+  useEffect(() => {
+    if (!imageError || !isTikTokCdnUrl || displayImageFetchedRef.current) return;
+    if (!videoThumbnails || videoThumbnails.length === 0) return;
+
+    // Get first video URL
+    const firstVideo = videoThumbnails[0];
+    const firstVideoUrl = typeof firstVideo === 'string' ? firstVideo : firstVideo.url;
+    
+    if (!firstVideoUrl || !firstVideoUrl.includes("tiktok.com")) return;
+
+    // Check client-side cache first
+    const cachedThumbnail = getTikTokThumbnailCache()[firstVideoUrl]?.url;
+    if (cachedThumbnail) {
+      setDisplayImage(cachedThumbnail);
+      setImageError(false);
+      displayImageFetchedRef.current = true;
+      return;
+    }
+
+    // Fetch fresh thumbnail from first video
+    async function fetchFreshDisplayImage() {
+      try {
+        setDisplayImageLoading(true);
+        const response = await fetch(
+          `/api/tiktok/thumbnail?url=${encodeURIComponent(firstVideoUrl)}`,
+          {
+            signal: AbortSignal.timeout(10000), // 10 second timeout
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.thumbnailUrl) {
+            // Use fresh thumbnail as display image
+            setDisplayImage(data.thumbnailUrl);
+            setImageError(false);
+            setTikTokThumbnailCache(firstVideoUrl, data.thumbnailUrl);
+          }
+        }
+      } catch (error) {
+        // Silently handle - will show placeholder
+        console.warn('[ProductCard] Failed to fetch fresh display image:', error);
+      } finally {
+        setDisplayImageLoading(false);
+        displayImageFetchedRef.current = true;
+      }
+    }
+
+    fetchFreshDisplayImage();
+  }, [imageError, isTikTokCdnUrl, videoThumbnails]);
 
   // Process video thumbnails - use stored thumbnails first, fetch if needed
   useEffect(() => {
@@ -185,8 +290,8 @@ export default function ProductCard({
 
         fetchedRef.current.add(videoUrl); // Mark as fetching to prevent duplicates
           
-        try {
-          const response = await fetch(
+          try {
+            const response = await fetch(
             `/api/tiktok/thumbnail?url=${encodeURIComponent(videoUrl)}`,
             {
               // Add timeout to prevent hanging
@@ -198,7 +303,7 @@ export default function ProductCard({
             throw new Error(`HTTP ${response.status}`);
           }
 
-          const data = await response.json();
+            const data = await response.json();
 
           // Mark as complete whether we got a thumbnail or not
           setTiktokFetchComplete((prev) => ({
@@ -207,12 +312,12 @@ export default function ProductCard({
           }));
 
           // API returns null on failure - this is expected
-          if (data.thumbnailUrl) {
+            if (data.thumbnailUrl) {
             // Successfully fetched thumbnail
-            setTiktokThumbnails((prev) => ({
-              ...prev,
-              [index]: data.thumbnailUrl,
-            }));
+              setTiktokThumbnails((prev) => ({
+                ...prev,
+                [index]: data.thumbnailUrl,
+              }));
           } else {
             // No thumbnail available - mark as failed to prevent retries
             failedFetchesRef.current.add(videoUrl);
@@ -227,8 +332,8 @@ export default function ProductCard({
               ...prev,
               [index]: null,
             }));
-          }
-        } catch (error) {
+            }
+          } catch (error) {
           // Mark as failed to prevent repeated retries
           failedFetchesRef.current.add(videoUrl);
           // Store in sessionStorage to persist across page reloads
@@ -287,27 +392,38 @@ export default function ProductCard({
 
         {/* Main Product Image */}
         <div className="w-full aspect-[4/3] relative bg-gray-100 overflow-hidden rounded-xl">
-          {!imageError && isValidImageUrl(displayImageUrl) ? (
+          {!imageError && displayImage && isValidImageUrl(displayImage) ? (
             <Image
-              src={getSafeImageUrl(displayImageUrl)}
+              src={getSafeImageUrl(displayImage)}
               alt={productName}
               fill
               className="object-cover"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
               onError={(e) => {
-                console.warn(`[ProductCard] Failed to load image: ${displayImageUrl}`);
-                setImageError(true);
+                console.warn(`[ProductCard] Failed to load display image: ${displayImage}`);
+                // Only set error if we haven't already tried to fetch a fresh one
+                if (!displayImageFetchedRef.current) {
+                  setImageError(true);
+                } else {
+                  // Already tried fetching, show placeholder
+                  setDisplayImage(null);
+                }
               }}
               onLoad={() => {
                 // Reset error state if image loads successfully
                 if (imageError) setImageError(false);
+                setDisplayImageLoading(false);
               }}
               unoptimized={
-                displayImageUrl?.includes("amazon.com") ||
-                displayImageUrl?.includes("media-amazon.com") ||
-                displayImageUrl?.includes("tiktok.com")
+                displayImage?.includes("amazon.com") ||
+                displayImage?.includes("media-amazon.com") ||
+                displayImage?.includes("tiktok.com")
               }
             />
+          ) : displayImageLoading ? (
+            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+              <Loader size="md" text="Loading image..." className="text-gray-600" />
+            </div>
           ) : (
             <div className="w-full h-full bg-gray-200 flex items-center justify-center">
               <span className="text-gray-400 text-sm">
@@ -461,7 +577,7 @@ export default function ProductCard({
                                 if (data.thumbnailUrl) {
                                   console.log(`[ProductCard] ✅ Successfully fetched fresh thumbnail on retry`);
                                   // Update with fresh thumbnail - use DIRECTLY (no proxy) for best performance
-                                  setTiktokThumbnails((prev) => ({
+                          setTiktokThumbnails((prev) => ({
                                     ...prev,
                                     [originalIndex]: data.thumbnailUrl, // Direct URL, no proxy
                                   }));

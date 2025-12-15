@@ -31,6 +31,7 @@ export interface TrendingProductData {
   tiktokProductUrl: string
   amazonUrl?: string
   category?: string
+  amazonAllImages?: any[] | null // Amazon product's allImages array for high-res images
 }
 
 // Fetch all available weekly reports for date range selector
@@ -288,6 +289,9 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
         || stat.product.displayImageUrl 
         || "/img/product-placeholder.png";
 
+      // Get Amazon product images for high-resolution support
+      const amazonAllImages = amazonProduct?.allImages ? (amazonProduct.allImages as any) : null;
+
       return {
         id: stat.id,
         rank: stat.rankThisWeek || index + 1,
@@ -307,6 +311,7 @@ export async function getTrendingProducts(filters: TrendingProductFilters = {}) 
         tiktokProductUrl: stat.product.tiktokProductUrl,
         amazonUrl,
         category: productCategory,
+        amazonAllImages, // Include allImages for high-resolution image support
       }
     })
 

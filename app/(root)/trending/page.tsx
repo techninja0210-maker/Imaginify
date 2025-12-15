@@ -969,6 +969,7 @@ export default function TrendingProductsPage() {
                   isFavorite={product.isFavorite || false}
                   onFavoriteToggle={() => handleFavoriteToggle(product.productId, product.isFavorite)}
                   amazonUrl={product.amazonUrl}
+                  amazonAllImages={product.amazonAllImages}
                 />
               ))
             ) : (
