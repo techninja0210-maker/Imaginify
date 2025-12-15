@@ -391,13 +391,13 @@ export default function ProductCard({
         </div>
 
         {/* Main Product Image */}
-        <div className="w-full aspect-[4/3] relative bg-gray-100 overflow-hidden rounded-xl">
+        <div className="w-full aspect-[4/3] relative overflow-hidden rounded-xl">
           {!imageError && displayImage && isValidImageUrl(displayImage) ? (
             <Image
               src={getSafeImageUrl(displayImage)}
               alt={productName}
               fill
-              className="object-cover"
+              className="object-contain"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
               onError={(e) => {
                 console.warn(`[ProductCard] Failed to load display image: ${displayImage}`);

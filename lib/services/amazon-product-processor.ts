@@ -31,14 +31,49 @@ function extractImages(json: AmazonProductJson): {
   const media = json?.product?.media;
   const productImages = json?.product?.images;
   
-  // Get primary image from media.primary_image_url or use first image from product.images or media.images
-  let mainImageUrl = media?.primary_image_url || null;
-  if (!mainImageUrl) {
-    if (Array.isArray(productImages) && productImages.length > 0) {
-      mainImageUrl = productImages[0];
-    } else if (Array.isArray(media?.images) && media.images.length > 0) {
-      mainImageUrl = typeof media.images[0] === 'string' ? media.images[0] : media.images[0]?.url || null;
+  // Get main image from first valid image in arrays
+  // Note: The backfill actor puts the main image URL as the first item in the images array
+  // There is NO primary_image_url field in the backfill actor schema
+  const getFirstValidImage = (images: any[]): string | null => {
+    if (!Array.isArray(images) || images.length === 0) return null;
+    
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    
+    for (const img of images) {
+      const imgUrl = typeof img === 'string' ? img : img?.url || img?.src || null;
+      if (!imgUrl || typeof imgUrl !== 'string') continue;
+      
+      // Skip video thumbnails/icons (like .png play button overlays)
+      const isVideoThumbnail = imgUrl.includes('play-icon') || 
+                               imgUrl.includes('overlay') ||
+                               imgUrl.includes('default.jobtemplate');
+      if (isVideoThumbnail) continue;
+      
+      // Only consider actual image files
+      const hasImageExtension = imageExtensions.some(ext => 
+        imgUrl.toLowerCase().includes(ext)
+      );
+      if (!hasImageExtension && !imgUrl.includes('media-amazon.com/images/I/')) continue;
+      
+      // If it's a small thumbnail (e.g., _AC_US100_), upscale it to higher resolution
+      if (imgUrl.match(/_AC_[SLXYU]\d+_/)) {
+        return imgUrl.replace(/_AC_[SLXYU]\d+_/g, '_AC_SL1500_');
+      }
+      
+      return imgUrl;
     }
+    
+    return null;
+  };
+  
+  // Try product.images first, then media.images
+  let mainImageUrl: string | null = null;
+  if (Array.isArray(productImages) && productImages.length > 0) {
+    mainImageUrl = getFirstValidImage(productImages);
+  }
+  
+  if (!mainImageUrl && Array.isArray(media?.images) && media.images.length > 0) {
+    mainImageUrl = getFirstValidImage(media.images);
   }
 
   // Merge images from both sources, prioritizing media.images, then product.images
